@@ -1,0 +1,53 @@
+Data Processing Pipeline:
+  Camera Processing:
+    ▫ Camera Image → 2D Bounding Boxes | YoloV11
+    ▫ 2D Bounding Boxes → 2D Tracks | Bot-SORT
+
+  LiDAR Processing:
+    ▫ LiDAR → 3D Bounding Boxes | PointPillars or DSVT+TensorRT
+    ▫ 3D Bounding Boxes → 3D Tracks | AB3DMOT
+
+  GPS Processing:
+  ▫ GPS → Processed GPS | KalmanFilter
+
+  Trajectory Dataset:
+    ▫ 2D Tracks, Processed GPS → 2D Trajectory Data (time synced with Camera @ 5HZ) | (t − t1) / (t2 − t1) * (Pt2 − Pt1) + Pt1
+    ▫ 3D Tracks, Processed GPS → 3D Trajectory Data (time synced with LiDAR @ 5HZ) | (t − t1) / (t2 − t1) * (Pt2 − Pt1) + Pt1
+
+Questions:
+  ▫ Should the trajectory dataset include 2D camera data or not?
+  ▫ What does a sequence of "0.2s intervals for 51 frames over 10 seconds" mean for the trajectory dataset? Why not have a continuous trajectory dataset?
+
+
+
+Libraries to Use:
+  Camera Processing:
+    ▫ YoloV11: Ultralytics
+    ▫ Bot-SORT: Built-in Ultralytics
+
+  LiDAR Processing:
+    ▫ OpenPCDet && Downloaded Model: https://github.com/open-mmlab/OpenPCDet
+      ▫ Choose detection types: [Vehicle, Pedestrian, Cyclist]
+      ▫ Choose model: PointPillars or DSVT+TensorRT
+      ▫ Format data: https://github.com/open-mmlab/OpenPCDet/blob/master/docs/CUSTOM_DATASET_TUTORIAL.md
+      ▫ Run Evaluation: https://github.com/open-mmlab/OpenPCDet/blob/master/docs/GETTING_STARTED.md
+      ▫ Output: results.pkl in custom format
+    ▫ AB3DMOT: https://github.com/xinshuoweng/AB3DMOT/
+      ▫ Input: KITTI style detection data || custom format
+      ▫ Run Code: https://github.com/xinshuoweng/AB3DMOT/blob/master/docs/KITTI.md
+      ▫ Output: KITTI style tracking data
+
+  GPS Processing:
+    ▫ Kalman Filter: https://github.com/rlabbe/filterpy
+      ▫ Choose matrixes
+      ▫ Run Code: https://github.com/rlabbe/filterpy/blob/master/README.rst
+
+  *Other required code not mentioned in here will be custom code programmed by me
+
+Questions:
+  ▫ In the PDB_sample drive, do the LiDAR.bin & camera.png file names represent the amount of time since the UNIX epoch?
+  ▫ What label types should I use? Is [Vehicle, Pedestrian, Cyclist] correct?
+  ▫ For the LiDAR model, should I use PointPillars or DSVT+TensorRT?
+    ▫ DSVT is newer and, reportedly, has a high accuracy; DSVT uses transformers instead convolutions for processing 3D pillar features before conversion to BEV.
+    ▫ The two models have similar evaluation speeds and are both easily deployable in OpenPCDet.
+  ▫ I am unsure how to set up the Kalman Filter matrices. Is there a recommended way to do this?
