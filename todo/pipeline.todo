@@ -1,40 +1,42 @@
-Camera:
-  ▫ Load YoloV26, image data (python)
-  ▫ Run evaluation (python)
-  ▫ Format python obj and store data as ??? (python)
-  Major Dependencies:
-    ▫ Ultralytics
+Detailed Pipeline:
+  Execution Script:
+    ▫ Use docker in python to run python scripts and docker containers (ie. "import docker")
 
-LiDAR:
-  ▫ Clone OpenPCDet repository & install steps (Docker)
-  ▫ Format data into KITTI or custom dataset (python)
-  ▫ Run evaluation (Docker)
-  ▫ Store outputs in results.pkl (python)
-  ▫ Clone AB3DMOT repository & install steps (Docker)
-  ▫ Format results into custom format (python)
-  ▫ Rewrite certain AB3DMOT code to work with custom format (python)
-  ▫ Reformat output and store in file (python)
+  Camera:
+    ✔ Load YoloV26, image data (python) @done(26-06-22 16:22)
+    ✔ Run evaluation (python) @done(26-06-22 16:22)
+    ✔ Format python obj and store data (python) @done(26-06-22 16:22)
 
-GPS:
-  ▫ Clone filterpy repository & install steps (Docker)
-  ▫ Initiate Kalman Filter with matricies (python)
-  ▫ Run Kalman Filter on GPS data (python)
-  ▫ Store GPS data as csv with [timestamp, x, y, z] // xyz in global coordinates (python)
-  Major Dependencies:
-    ▫ filterpy through Docker container
-    ▫ filterpy dependencies
+  LiDAR:
+    ▫ Clone OpenPCDet repository & install steps (Docker)
+    ▫ Format data into KITTI or custom dataset (python)
+    ▫ Run PointPillars (Docker)
+    ▫ Store outputs in results.pkl (python)
+    ▫ Clone AB3DMOT repository & install steps (Docker)
+    ▫ Format results into custom format (python)
+    ▫ Rewrite certain AB3DMOT code to work with custom format (python)
+    ▫ Reformat output and store in file (python)
 
-3D Trajectory Dataset:
-  ▫ Load 3D Tracks and Processed GPS data (python)
-    ▫ 3D Tracks: [timestamp, driver_id, track_id, class, x, y, z, vx, vy, yaw, lenght, width, height] // xyz in local coordinates
-    ▫ GPS: [timestamp, x, y, z] // xyz in global coordinates
-  ▫ Sort tracks & GPS by timestamp (python)
-    ▫ Keep track of next same data: tracks[i].nextIdx = tracks[i+1].idx
-    ▫ Remove tracks that are outside gps timestamps (track[i].t < gps[0].t or track[i].t > gps[n-1].t)
-  ▫ Perform interpolation to align GPS timestamps to track timestamps (python)
-    ▫ track.gps = (track.t − gps1.t) / (gps2.t − gps1.t) * (gps2.p − gps1.p) + gps1.p
-    ▫ if (event[i].type == 'track'):  track[event.i].gps = (track[event.i].t - prev_gps.t) / (next_gps.t - prev_gps.t) * (next_gps.p - prev_gps.p) + prev_gps.p
-  ▫ Apply track transformation and convert to global coordinates (python)
-    ▫ convert track.xyz to global coordinates
-    ▫ track.global_xyz = track.xyz + gps.xyz
-  ▫ Store trajectory data in CSV file with [timestamp, driver_id, track_id, class, x, y, z, vx, vy, yaw, lenght, width, height] // xyz in global coordinates (python)
+  GPS:
+    ▫ Clone filterpy repository & install steps (Docker)
+    ▫ Initiate Kalman Filter with matricies (python)
+    ▫ Run Kalman Filter on GPS data (python)
+    ▫ Store GPS data as csv with [timestamp, x & y, z] // xyz in global coordinates (python)
+    Major Dependencies:
+      ▫ filterpy through Docker container
+      ▫ filterpy dependencies
+
+  3D Trajectory Dataset:
+    ▫ Load 3D Tracks and Processed GPS data (python)
+      ▫ 3D Tracks: [timestamp, driver_id, track_id, class, x & y, z, vx, vy, heading, lenght, width, height] // xyz in local coordinates
+      ▫ GPS: [timestamp, x & y, z] // xyz in global coordinates
+    ▫ Sort tracks & GPS by timestamp (python)
+      ▫ Keep track of next same data: tracks[i].nextIdx = tracks[i+1].idx
+      ▫ Remove tracks that are outside gps timestamps (track[i].t < gps[0].t or track[i].t > gps[n-1].t)
+    ▫ Perform interpolation to align GPS timestamps to track timestamps (python)
+      ▫ track.gps = (track.t − gps1.t) / (gps2.t − gps1.t) * (gps2.p − gps1.p) + gps1.p
+      ▫ if (event[i].type == 'track'):  track[event.i].gps = (track[event.i].t - prev_gps.t) / (next_gps.t - prev_gps.t) * (next_gps.p - prev_gps.p) + prev_gps.p
+    ▫ Apply track transformation and convert to global coordinates (python)
+      ▫ convert track.xyz to global coordinates
+      ▫ track.global_xyz = track.xyz + gps.xyz
+    ▫ Store trajectory data in CSV file with [timestamp, driver_id, track_id, class, x & y, z, vx, vy, heading, lenght, width, height] // xyz in global coordinates (python)

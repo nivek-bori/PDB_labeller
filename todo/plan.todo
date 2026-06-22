@@ -1,4 +1,4 @@
-Data Processing Pipeline:
+Overall Pipeline:
   Camera Processing:
     ▫ Camera Image → 2D Bounding Boxes | YoloV11
     ▫ 2D Bounding Boxes → 2D Tracks | Bot-SORT
@@ -11,7 +11,6 @@ Data Processing Pipeline:
   ▫ GPS → Processed GPS | KalmanFilter
 
   Trajectory Dataset:
-    ▫ 2D Tracks, Processed GPS → 2D Trajectory Data (time synced with Camera @ 5HZ) | (t − t1) / (t2 − t1) * (Pt2 − Pt1) + Pt1
     ▫ 3D Tracks, Processed GPS → 3D Trajectory Data (time synced with LiDAR @ 5HZ) | (t − t1) / (t2 − t1) * (Pt2 − Pt1) + Pt1
 
 Questions:
@@ -27,8 +26,7 @@ Libraries to Use:
 
   LiDAR Processing:
     ▫ OpenPCDet && Downloaded Model: https://github.com/open-mmlab/OpenPCDet
-      ▫ Choose detection types: [Vehicle, Pedestrian, Cyclist]
-      ▫ Choose model: PointPillars or DSVT+TensorRT
+      ▫ Use: PointPillars & [Vehicle, Pedestrian, Cyclist]
       ▫ Format data: https://github.com/open-mmlab/OpenPCDet/blob/master/docs/CUSTOM_DATASET_TUTORIAL.md
       ▫ Run Evaluation: https://github.com/open-mmlab/OpenPCDet/blob/master/docs/GETTING_STARTED.md
       ▫ Output: results.pkl in custom format

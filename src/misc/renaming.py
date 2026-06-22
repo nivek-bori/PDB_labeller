@@ -10,7 +10,8 @@ import os
 import re
 from datetime import datetime
 
-EPOCH_FILENAME_RE = re.compile(r"^(\d{10})(?:\.(\d+))?(.*)$")
+
+EPOCH_FILENAME_RE = re.compile(r"^(\d+)(.*)$")
 
 
 def _get_user_roots() -> list[str]:
@@ -78,16 +79,19 @@ def _format_epoch_filename(name: str) -> str | None:
     if not match:
         return None
 
-    seconds_str, fractional, remainder = match.groups()
+    nanoseconds_since_epoch = match.group(1)
+
     try:
-        dt = datetime.fromtimestamp(int(seconds_str))
+        total_ns = int(nanoseconds_since_epoch)
+        seconds_since_epoch = total_ns // 1_000_000_000
+        nanoseconds = total_ns % 1_000_000_000
+
+        dt = datetime.fromtimestamp(seconds_since_epoch)
     except (OSError, OverflowError, ValueError):
         return None
 
     formatted = dt.strftime("%Y-%m-%d_%H%M%S")
-    if fractional:
-        formatted += f"_{fractional}"
-    formatted += remainder
+    formatted += f"_{nanoseconds:09d}"
     return formatted + ext
 
 
