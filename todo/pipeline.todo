@@ -1,18 +1,30 @@
 Detailed Pipeline:
   Execution Script:
     ▫ Use docker in python to run python scripts and docker containers (ie. "import docker")
+    ▫ python=3.10
+    ▫ write script that creates/clears data/* dirs
+    ▫ delete intermediate after execution
 
   Camera:
     ✔ Load YoloV26, image data (python) @done(26-06-22 16:22)
     ✔ Run evaluation (python) @done(26-06-22 16:22)
     ✔ Format python obj and store data (python) @done(26-06-22 16:22)
 
-  LiDAR:
-    ▫ Clone OpenPCDet repository & install steps (Docker)
-    ▫ Format data into KITTI or custom dataset (python)
-    ▫ Run PointPillars (Docker)
+  OpenPCDet:
+    ✔ Clone OpenPCDet repository & install steps (Docker) @started(26-06-22 16:44) @done(26-06-22 16:44) @lasted(28s)
+    ✔ Format data into KITTI or custom dataset (python) @started(26-06-22 18:53) @done(26-06-22 20:22) @lasted(1h29m10s)
+      ✔ Current data: @done(26-06-22 18:53)
+        ✔ 000000.bin @done(26-06-22 18:53)
+      ✔ Required data: @started(26-06-22 18:54) @done(26-06-22 19:34) @lasted(40m26s)
+        ✔ data/ImageSets/val.txt @started(26-06-22 18:54) @done(26-06-22 19:34) @lasted(40m23s)
+        ✔ data/points/000000.npy @started(26-06-22 18:53) @done(26-06-22 18:53) @lasted(34s)
+        ✔ custom_dataset.yaml @started(26-06-22 20:20) @done(26-06-22 20:22) @lasted(2m7s)
+        ✔ model.yaml @started(26-06-22 20:24) @done(26-06-22 20:43) @lasted(19m38s)
+    ▫ REQUIRES GPU: Run PointPillars (Docker)
     ▫ Store outputs in results.pkl (python)
-    ▫ Clone AB3DMOT repository & install steps (Docker)
+  
+  AB3DMOT:
+    ▫ Clone AB3DMOT repository & install steps (Docker) @started(26-06-23 12:39)
     ▫ Format results into custom format (python)
     ▫ Rewrite certain AB3DMOT code to work with custom format (python)
     ▫ Reformat output and store in file (python)
