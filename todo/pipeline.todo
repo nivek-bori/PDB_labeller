@@ -24,19 +24,16 @@ Detailed Pipeline:
     ▫ Store outputs in results.pkl (python)
   
   AB3DMOT:
-    ▫ Clone AB3DMOT repository & install steps (Docker) @started(26-06-23 12:39)
+    ✔ Clone AB3DMOT repository & install steps (Docker) @started(26-06-23 12:39) @done(26-06-30 14:46) @lasted(1w2h7m50s)
     ▫ Format results into custom format (python)
     ▫ Rewrite certain AB3DMOT code to work with custom format (python)
     ▫ Reformat output and store in file (python)
 
   GPS:
-    ▫ Clone filterpy repository & install steps (Docker)
-    ▫ Initiate Kalman Filter with matricies (python)
-    ▫ Run Kalman Filter on GPS data (python)
-    ▫ Store GPS data as csv with [timestamp, x & y, z] // xyz in global coordinates (python)
-    Major Dependencies:
-      ▫ filterpy through Docker container
-      ▫ filterpy dependencies
+    ✔ Clone filterpy repository & install steps (Docker) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(39s)
+    ✔ Initiate Kalman Filter with matricies (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(42s)
+    ✔ Run Kalman Filter on GPS data (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(44s)
+    ✔ Store GPS data as csv with [timestamp, x & y, z] // xyz in global coordinates (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(45s)
 
   3D Trajectory Dataset:
     ▫ Load 3D Tracks and Processed GPS data (python)

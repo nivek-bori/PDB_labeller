@@ -1,30 +1,36 @@
-FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu22.04
+FROM python:3.9-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Etc/UTC
 WORKDIR /workspace
 
-ENV CUDA_HOME=/usr/local/cuda
-ENV TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6"
-
-# python dependencies
 RUN apt-get update && apt-get install -y \
-    python3 python3-dev python3-pip git build-essential cmake ninja-build \
-    libgl1 libglib2.0-0 \
+    git \
+    build-essential \
+    cmake \
+    pkg-config \
+    libgl1 \
+    libglib2.0-0 \
+    libfreetype6-dev \
+    libpng-dev \
     && rm -rf /var/lib/apt/lists/*
-
-RUN ln -sf /usr/bin/python3 /usr/bin/python && \
-    ln -sf /usr/bin/pip3 /usr/bin/pip
 
 RUN pip install --upgrade pip setuptools wheel
 
-# install AB3DMOT
-RUN git clone https://github.com/xinshuoweng/AB3DMOT.git
+RUN git clone https://github.com/xinshuoweng/AB3DMOT.git /workspace/AB3DMOT
+
 WORKDIR /workspace/AB3DMOT
 
-RUN pip install -r requirements.txt
+RUN pip install \
+    numpy==1.26.4 \
+    scipy \
+    scikit-learn \
+    filterpy \
+    numba \
+    matplotlib \
+    pyyaml \
+    pillow \
+    opencv-python-headless
 
-# # execute script
 WORKDIR /workspace
 
 COPY src /workspace/src
@@ -33,5 +39,3 @@ COPY src/scripts/run_ab3dmot.sh /workspace/run_ab3dmot.sh
 RUN chmod +x /workspace/run_ab3dmot.sh
 
 ENTRYPOINT ["/workspace/run_ab3dmot.sh"]
-
-CMD ["bin/bash"]

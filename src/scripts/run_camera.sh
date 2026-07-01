@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ -n "${IMG_SOURCE_PATH:-}" ]]; then
-    exec python -m src.scripts.track_2d "${IMG_SOURCE_PATH}"
+    exec python -m src.camera.ultralytics "${IMG_SOURCE_PATH}"
 fi
 
-exec python -m src.scripts.track_2d "$@"
+exec python -m src.camera.ultralytics "$@"

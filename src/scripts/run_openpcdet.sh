@@ -24,4 +24,4 @@ python tools/test.py \
   --batch_size 1 \
   --workers 0
 
-echo "Done."
+echo "Done."p
