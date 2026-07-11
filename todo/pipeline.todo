@@ -1,39 +1,18 @@
 Detailed Pipeline:
+  Overall:
+    ▫ Figure out how to timesync everything & what things @next
+    ▫ Add driver_id to everything (constants.IMAGE_COLUMNS, etc)
   Execution Script:
-    ▫ Use docker in python to run python scripts and docker containers (ie. "import docker")
-    ▫ python=3.10
-    ▫ write script that creates/clears data/* dirs
-    ▫ delete intermediate after execution
-
-  Camera:
-    ✔ Load YoloV26, image data (python) @done(26-06-22 16:22)
-    ✔ Run evaluation (python) @done(26-06-22 16:22)
-    ✔ Format python obj and store data (python) @done(26-06-22 16:22)
+    ▫ Add final sequencer (separate into 50 frame / 10s @ 0.2HZ)
 
   OpenPCDet:
-    ✔ Clone OpenPCDet repository & install steps (Docker) @started(26-06-22 16:44) @done(26-06-22 16:44) @lasted(28s)
-    ✔ Format data into KITTI or custom dataset (python) @started(26-06-22 18:53) @done(26-06-22 20:22) @lasted(1h29m10s)
-      ✔ Current data: @done(26-06-22 18:53)
-        ✔ 000000.bin @done(26-06-22 18:53)
-      ✔ Required data: @started(26-06-22 18:54) @done(26-06-22 19:34) @lasted(40m26s)
-        ✔ data/ImageSets/val.txt @started(26-06-22 18:54) @done(26-06-22 19:34) @lasted(40m23s)
-        ✔ data/points/000000.npy @started(26-06-22 18:53) @done(26-06-22 18:53) @lasted(34s)
-        ✔ custom_dataset.yaml @started(26-06-22 20:20) @done(26-06-22 20:22) @lasted(2m7s)
-        ✔ model.yaml @started(26-06-22 20:24) @done(26-06-22 20:43) @lasted(19m38s)
-    ▫ REQUIRES GPU: Run PointPillars (Docker)
-    ▫ Store outputs in results.pkl (python)
+    ▫ Make OpenPCDet accept PDB data (python)
+      ▫ visualize point cloud → check if x is front/back and y is left/right @next
+    ▫ (Requires GPU) Run PointPillars (Docker)
   
   AB3DMOT:
-    ✔ Clone AB3DMOT repository & install steps (Docker) @started(26-06-23 12:39) @done(26-06-30 14:46) @lasted(1w2h7m50s)
-    ▫ Format results into custom format (python)
-    ▫ Rewrite certain AB3DMOT code to work with custom format (python)
-    ▫ Reformat output and store in file (python)
-
-  GPS:
-    ✔ Clone filterpy repository & install steps (Docker) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(39s)
-    ✔ Initiate Kalman Filter with matricies (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(42s)
-    ✔ Run Kalman Filter on GPS data (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(44s)
-    ✔ Store GPS data as csv with [timestamp, x & y, z] // xyz in global coordinates (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(45s)
+    ▫ Format data into KITTI format for input (python) @started(26-07-11 15:56) @blocked:openpcdet.requires_gpu
+      ▫ format results.pkl into KITTI detections format
 
   3D Trajectory Dataset:
     ▫ Load 3D Tracks and Processed GPS data (python)
@@ -48,4 +27,22 @@ Detailed Pipeline:
     ▫ Apply track transformation and convert to global coordinates (python)
       ▫ convert track.xyz to global coordinates
       ▫ track.global_xyz = track.xyz + gps.xyz
-    ▫ Store trajectory data in CSV file with [timestamp, driver_id, track_id, class, x & y, z, vx, vy, heading, lenght, width, height] // xyz in global coordinates (python)
+    ▫ Store trajectory data in Parquet or CSV file with [timestamp, driver_id, track_id, class, x & y, z, vx,  vy, heading, lenght, width, height] // xyz in global coordinates (python)
+
+Finished:
+  ✔ Reformat output and store in file (python) @started(26-07-11 15:55) @done(26-07-11 15:56) @lasted(1m1s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ remove images from AB3DMOT execution of PDB dataset @started(26-07-08 13:28) @done(26-07-08 17:28) @lasted(4h50s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ reformat gps into oxts @started(26-07-08 17:28) @done(26-07-11 12:08) @lasted(2d18h40m20s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ verify_data in main.py/ln46 @started(26-07-08 12:53) @done(26-07-08 13:21) @lasted(28m48s) @project(Detailed Pipeline.Execution Script)
+  ✔ implement metadata for driver id @started(26-07-08 13:27) @done(26-07-08 13:27) @lasted(8s) @project(Detailed Pipeline.Execution Script)
+  ✔ Use docker in python to run python scripts and docker containers (ie. "import docker") @started(26-06-30 18:04) @done(26-07-03 16:12) @lasted(2d22h9m) @project(Detailed Pipeline.Execution Script)
+  ✔ delete data/intermediate after execution @started(26-07-03 16:18) @done(26-07-03 16:18) @lasted(9s) @project(Detailed Pipeline.Execution Script)
+  ✔ Initiate Kalman Filter with matricies (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(42s) @project(Detailed Pipeline.GPS)
+  ✔ Run Kalman Filter on GPS data (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(44s) @project(Detailed Pipeline.GPS)
+  ✔ Store GPS data as csv with [timestamp, x & y, z] // xyz in global coordinates (python) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(45s) @project(Detailed Pipeline.GPS)
+  ✔ Clone AB3DMOT repository & install steps (Docker) @started(26-06-23 12:39) @done(26-06-30 14:46) @lasted(1w2h7m50s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ Clone filterpy repository & install steps (Docker) @started(26-06-30 17:14) @done(26-06-30 17:14) @lasted(39s) @project(Detailed Pipeline.GPS)
+  ✔ Load YoloV26, image data (python) @done(26-06-22 16:22) @project(Detailed Pipeline.Image)
+  ✔ Run evaluation (python) @done(26-06-22 16:22) @project(Detailed Pipeline.Image)
+  ✔ Format python obj and store data (python) @done(26-06-22 16:22) @project(Detailed Pipeline.Image)
+  ✔ Clone OpenPCDet repository & install steps (Docker) @started(26-06-22 16:44) @done(26-06-22 16:44) @lasted(28s) @project(Detailed Pipeline.OpenPCDet)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Prefer positional arguments over environment variables
 DATA_DIR_PATH_ARG="${1:-}"
-GPS_FILE_PATH_ARG="${2:-}"
+IMG_SOURCE_PATH_ARG="${2:-}"
 
 if [[ -n "$DATA_DIR_PATH_ARG" ]]; then
     DATA_DIR_PATH="$DATA_DIR_PATH_ARG"
@@ -14,13 +14,13 @@ else
     exit 1
 fi
 
-if [[ -n "$GPS_FILE_PATH_ARG" ]]; then
-    GPS_FILE_PATH="$GPS_FILE_PATH_ARG"
-elif [[ -n "${GPS_FILE_PATH:-}" ]]; then
-    GPS_FILE_PATH="$GPS_FILE_PATH"
+if [[ -n "$IMG_SOURCE_PATH_ARG" ]]; then
+    IMG_SOURCE_PATH="$IMG_SOURCE_PATH_ARG"
+elif [[ -n "${IMG_SOURCE_PATH:-}" ]]; then
+    IMG_SOURCE_PATH="$IMG_SOURCE_PATH"
 else
-    echo "ERROR: GPS_FILE_PATH environment variable or position 2 argument must be set." >&2
+    echo "ERROR: IMG_SOURCE_PATH environment variable or position 2 argument must be set." >&2
     exit 1
 fi
 
-exec python -m src.gps.gps "$DATA_DIR_PATH" "$GPS_FILE_PATH"
+exec python -m src.image.image "$DATA_DIR_PATH" "$IMG_SOURCE_PATH"

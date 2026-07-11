@@ -35,8 +35,7 @@ RUN pip install -r requirements.txt
 RUN MAX_JOBS=5 pip install -e . --no-build-isolation
 
 # install additional dependencies
-RUN pip install av2==0.3.6 gdown
-RUN pip install numpy==1.26.4
+RUN pip install av2==0.3.6 gdown numpy==1.26.4 open3d==0.19.0
 
 # download model
 RUN mkdir -p /workspace/models && \

@@ -10,32 +10,10 @@ def safe_makedirs(path: str, exist_ok: bool = True):
         os.makedirs(path, exist_ok=exist_ok)
 
 
-def get_data_dir_relative_path(path: str) -> str:
-    """
-    Returns everything after "data/raw" or "data/processed".
-    """
-    import re
-
-    m = re.search(r"(data/raw|data/processed)(.*)", path)
-    if m:
-        return m.group(2).lstrip("/\\")
-    return path
-
-
-def get_full_path(path: str) -> str:
-    if "data/" in path or "data\\\\" in path:
-        return path
-    elif path.startswith("raw"):
-        return os.path.join("data", path)
-    else:
-        return os.path.join("data/raw", path)
-
-
-def get_timestamps_and_paths(
+# both lidar and images
+def get_filenames_and_paths(
     dir_path: str, valid_extensions: list[str]
 ) -> tuple[list[str], list[str]]:
-    dir_path = get_full_path(dir_path)
-
     filenames = sorted(
         [
             f
@@ -48,3 +26,27 @@ def get_timestamps_and_paths(
     img_paths = [os.path.join(dir_path, f) for f in filenames]
 
     return timestamps, img_paths
+
+
+def delete_data_intermediate_dir():
+    import shutil
+
+    intermediate_dir = "data/intermediate"
+    if os.path.exists(intermediate_dir):
+        shutil.rmtree(intermediate_dir)
+
+
+def load_metadata(data_dir_path: str, throw_no_file_error: bool = True):
+    import json
+
+    if os.path.isdir(data_dir_path):
+        metadata_path = os.path.join(data_dir_path, "metadata.json")
+    else:
+        metadata_path = data_dir_path
+
+    if throw_no_file_error and not os.path.exists(metadata_path):
+        raise FileNotFoundError(f"Metadata file not found at {metadata_path}")
+
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    return metadata

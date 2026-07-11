@@ -10,6 +10,8 @@ import os
 import re
 from datetime import datetime
 
+from src.misc.constants import NS_PER_SECOND
+
 
 EPOCH_FILENAME_RE = re.compile(r"^(\d+)(.*)$")
 
@@ -83,8 +85,8 @@ def _format_epoch_filename(name: str) -> str | None:
 
     try:
         total_ns = int(nanoseconds_since_epoch)
-        seconds_since_epoch = total_ns // 1_000_000_000
-        nanoseconds = total_ns % 1_000_000_000
+        seconds_since_epoch = total_ns // NS_PER_SECOND
+        nanoseconds = total_ns % NS_PER_SECOND
 
         dt = datetime.fromtimestamp(seconds_since_epoch)
     except (OSError, OverflowError, ValueError):

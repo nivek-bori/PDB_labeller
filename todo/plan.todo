@@ -1,6 +1,6 @@
 Overall Pipeline:
-  Camera Processing:
-    ▫ Camera Image → 2D Bounding Boxes | YoloV11
+  Image Processing:
+    ▫ Image Image → 2D Bounding Boxes | YoloV11
     ▫ 2D Bounding Boxes → 2D Tracks | Bot-SORT
 
   LiDAR Processing:
@@ -20,7 +20,7 @@ Questions:
 
 
 Libraries to Use:
-  Camera Processing:
+  Image Processing:
     ▫ YoloV11: Ultralytics
     ▫ Bot-SORT: Built-in Ultralytics
 

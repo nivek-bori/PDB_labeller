@@ -1,3 +1,6 @@
-echo "Script not implemented yet"
+#!/usr/bin/env bash
+set -euo pipefail
 
-exit 1
+cd /workspace/AB3DMOT
+
+python main.py --dataset detection_results --split test --det_name pointpillars

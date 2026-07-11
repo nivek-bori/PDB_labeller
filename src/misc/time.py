@@ -2,12 +2,14 @@ def get_ns_timestamp(timestamp) -> int:
     import datetime
     import re
 
+    from src.misc.constants import NS_PER_SECOND, NS_TIMESTAMP_THRESHOLD
+
     if isinstance(timestamp, int):
-        if timestamp > 1e14:  # >3,000 years in ns
+        if timestamp > NS_TIMESTAMP_THRESHOLD:
             return timestamp
-        return int(timestamp * 1e9)
+        return int(timestamp * NS_PER_SECOND)
     elif isinstance(timestamp, float):
-        return int(timestamp * 1e9)
+        return int(timestamp * NS_PER_SECOND)
     elif not isinstance(timestamp, str):
         raise TypeError("timestamp must be str, int, or float")
 
@@ -15,9 +17,9 @@ def get_ns_timestamp(timestamp) -> int:
     # 1. Try pure integer string (filename with epoch maybe)
     if re.fullmatch(r"\d{10,20}", ts):
         value = int(ts)
-        if value > 1e14:  # likely ns
+        if value > NS_TIMESTAMP_THRESHOLD:
             return value
-        return int(value * 1e9)
+        return int(value * NS_PER_SECOND)
     # 2. Try ISO or similar
     try:
         # Try with nanosecond-level
@@ -31,13 +33,13 @@ def get_ns_timestamp(timestamp) -> int:
                 frac = (frac + "000000000")[:9]
                 dt = datetime.datetime.fromisoformat(base)
                 epoch = datetime.datetime(1970, 1, 1, tzinfo=dt.tzinfo)
-                ns = int((dt - epoch).total_seconds()) * 1_000_000_000
+                ns = int((dt - epoch).total_seconds()) * NS_PER_SECOND
                 ns += int(frac)
                 return ns
         # Try normal fromisoformat (no ns)
         dt = datetime.datetime.fromisoformat(ts)
         epoch = datetime.datetime(1970, 1, 1, tzinfo=dt.tzinfo)
-        return int((dt - epoch).total_seconds() * 1e9)
+        return int((dt - epoch).total_seconds() * NS_PER_SECOND)
     except Exception:
         pass
 
@@ -47,8 +49,8 @@ def get_ns_timestamp(timestamp) -> int:
         stem = ts.split(".")[0]
     if re.fullmatch(r"\d{10,20}", stem):
         value = int(stem)
-        if value > 1e14:
+        if value > NS_TIMESTAMP_THRESHOLD:
             return value
-        return int(value * 1e9)
+        return int(value * NS_PER_SECOND)
 
     raise ValueError(f"Could not parse timestamp: {timestamp}")

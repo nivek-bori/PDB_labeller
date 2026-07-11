@@ -1,18 +1,20 @@
 import os
+from src.misc.constants import PDB_TO_KITTI
 from src.misc.io import safe_makedirs
 
 
-def create_dataset_config(data_dir_relative_path: str, point_cloud_range: list):
+def create_dataset_config(lidar_source_path: str, point_cloud_range: list):
+    map_class_to_kitti = "\n".join(
+        f"\t\"{k}\": '{v}'," for k, v in PDB_TO_KITTI.items()
+    )
     return f"""
 DATASET: 'CustomDataset'
-DATA_PATH: '../data/intermediate{data_dir_relative_path}'
+DATA_PATH: '../data/intermediate/{lidar_source_path}'
 
 POINT_CLOUD_RANGE: {point_cloud_range}
 
 MAP_CLASS_TO_KITTI: {{
-	"Vehicle": 'Car',
-	'Pedestrian': 'Pedestrian',
-	'Cyclist': 'Cyclist',
+{map_class_to_kitti}
 }}
 
 DATA_SPLIT: {{
