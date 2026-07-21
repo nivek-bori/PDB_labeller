@@ -26,7 +26,7 @@ else
 fi
 
 echo "run_openpcdet.sh >>> preprocessing LIDAR data..."
-python -m src.openpcdet.preprocess_lidar "$DATA_DIR_PATH" "$LIDAR_SOURCE_PATH"
+python -m src.openpcdet.prep_openpcdet_in "$DATA_DIR_PATH" "$LIDAR_SOURCE_PATH"
 
 # OPENPCDET
 python -m openpcdet.datasets.custom.custom_dataset create_custom_infos openpcdet/tools/cfgs/dataset_configs/custom_dataset.yaml

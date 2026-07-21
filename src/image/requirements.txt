@@ -1,4 +1,2 @@
-numpy==2.2.6
-Pillow==12.2.0
-pyarrow==24.0.0
-ultralytics==8.4.75
+pyarrow==25.0.0
+ultralytics==8.4.101

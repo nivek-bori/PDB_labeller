@@ -8,115 +8,66 @@ from src.misc.constants import (
     DOCKER_MODELS_BIND,
     DOCKER_SRC_BIND,
     DOCKER_WORKSPACE,
-    IMAGE_EXTENSIONS,
-    LIDAR_EXTENSIONS,
-    METADATA_REQUIRED_KEYS,
 )
-from src.misc.io import delete_data_intermediate_dir, load_metadata
+from src.misc.io import delete_data_intermediate_dir, load_metadata, verify_data_dirs
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+BUILT_IMAGES = []
 
 
-def _get_arguements() -> list[str]:
+def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Auto-label PDB data")
 
     parser.add_argument(
         "paths_to_data",
+        nargs="?",
         type=str,
         help="Paths to driving session data, separated by a semicolon.",
     )
 
-    args = parser.parse_args()
-    PATHS_TO_DATA = (
-        os.environ["PATHS_TO_DATA"]
-        if "PATHS_TO_DATA" in os.environ
-        else args.paths_to_data
+    parser.add_argument(
+        "--no_gps",
+        action="store_true",
+        help="Do not process GPS data.",
     )
 
-    return PATHS_TO_DATA.split(";")
+    parser.add_argument(
+        "--no_image",
+        action="store_true",
+        help="Do not process camera image data.",
+    )
+
+    parser.add_argument(
+        "--no_lidar",
+        action="store_true",
+        help="Do not process LiDAR data.",
+    )
+
+    args = parser.parse_args()
+
+    paths_string = os.environ.get("PATHS_TO_DATA", args.paths_to_data)
+    if not paths_string:
+        parser.error("paths_to_data must be provided either as a command-line argument or through the PATHS_TO_DATA environment variable.")
+
+    paths_to_data = [path.strip() for path in paths_string.split(";") if path.strip()]
+    flags = [flag for flag in ["no_gps", "no_image", "no_lidar"] if getattr(args, flag)]
+
+    return paths_to_data, flags
 
 
-def _verify_data_dirs(data_dir_paths):
-    issues = []
+def _to_container_data_path(host_path: str | Path) -> str:
+    host_data_root = (PROJECT_ROOT / "data").resolve()
+    resolved_path = Path(host_path).resolve()
 
-    for data_dir_path in data_dir_paths:
-        # load metadata
-        metadata = load_metadata(data_dir_paths, throw_no_file_error=False)
-        if not metadata:
-            issues.append(f"[{data_dir_path}] Metadata is empty or invalid JSON.")
-            continue
+    try:
+        relative_path = resolved_path.relative_to(host_data_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"Path must be inside {host_data_root}: {resolved_path}"
+        ) from exc
 
-        missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
-        if missing_keys:
-            issues.append(
-                f"[{data_dir_path}] Metadata missing required keys: {missing_keys}"
-            )
-            continue
-
-        # verify lidar
-        lidar_paths = metadata.get("lidar_paths", [])
-        if not lidar_paths:
-            issues.append(
-                f"[{data_dir_path}] Metadata 'lidar_paths' is empty or missing."
-            )
-        for lidar_path in lidar_paths:
-            if not os.path.isdir(lidar_path):
-                issues.append(
-                    f"[{data_dir_path}] Lidar directory does not exist: {lidar_path}"
-                )
-                continue
-
-            lidar_files = [
-                f
-                for f in os.listdir(lidar_path)
-                if os.path.splitext(f)[1].lower() in LIDAR_EXTENSIONS
-            ]
-            if not lidar_files:
-                issues.append(
-                    f"[{data_dir_path}] No lidar files with extensions {LIDAR_EXTENSIONS} found in {lidar_path}"
-                )
-
-        # verify image
-        image_paths = metadata.get("image_paths", [])
-        if not image_paths:
-            issues.append(
-                f"[{data_dir_path}] Metadata 'image_paths' is empty or missing."
-            )
-        for image_path in image_paths:
-            if not os.path.isdir(image_path):
-                issues.append(
-                    f"[{data_dir_path}] Image directory does not exist: {image_path}"
-                )
-                continue
-
-            image_files = [
-                f
-                for f in os.listdir(image_path)
-                if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
-            ]
-            if not image_files:
-                issues.append(
-                    f"[{data_dir_path}] No image files with extensions {IMAGE_EXTENSIONS} found in {image_path}"
-                )
-
-        # verify gps
-        gps_path = os.path.join(data_dir_path, "gps.csv")
-        if not os.path.exists(gps_path):
-            issues.append(
-                f"[{data_dir_path}] gps.csv not found at expected path: {gps_path}"
-            )
-
-        # verify can bus
-        canbus_path = os.path.join(data_dir_path, "canbus.json")
-        if not os.path.exists(canbus_path):
-            issues.append(
-                f"[{canbus_path}] gps.csv not found at expected path: {canbus_path}"
-            )
-
-    if len(issues) > 0:
-        error_log = "Data verification failed:\n" + "\n".join(issues)
-        raise Exception(error_log)
+    return str(Path(DOCKER_DATA_BIND) / relative_path)
 
 
 def _get_build_configs() -> list[dict]:
@@ -142,102 +93,141 @@ def _get_build_configs() -> list[dict]:
     return BUILD_CONFIGS
 
 
-def _get_execute_configs(data_dir_path) -> list[dict]:
+def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> list[dict]:
     metadata = load_metadata(data_dir_path)
+    container_data_dir_path = _to_container_data_path(data_dir_path)
 
     # docker containers executed in sequence
     execute_configs = []
 
     # gps
-    execute_configs.append({"name": "gps", "parameters": [data_dir_path]})
+    if "no_gps" not in no_execute_flags:
+        execute_configs.append({"name": "gps", "parameters": [container_data_dir_path]})
 
     # image
-    for image_path in metadata["image_paths"]:
-        execute_configs.append(
-            {"name": "image", "parameters": [data_dir_path, image_path]}
-        )
+    if "no_image" not in no_execute_flags:
+        for image_rpath in metadata["image_rpaths"]:
+            execute_configs.append({"name": "image", "parameters": [container_data_dir_path, image_rpath]})
 
     # openpcdet -> ab3dmot
-    for lidar_path in metadata["lidar_paths"]:
-        execute_configs.append(
-            {
-                "name ": "openpcdet",
-                "volumes": {
-                    os.path.join(PROJECT_ROOT, "models"): {
-                        "bind": DOCKER_MODELS_BIND,
-                        "mode": "rw",
+    if "no_lidar" not in no_execute_flags:
+        for lidar_rpath in metadata["lidar_rpaths"]:
+            execute_configs.append(
+                {
+                    "name": "openpcdet",
+                    "gpu": True,
+                    "volumes": {
+                        os.path.join(PROJECT_ROOT, "models"): {
+                            "bind": DOCKER_MODELS_BIND,
+                            "mode": "rw",
+                        },
                     },
-                },
-                "parameters": [data_dir_path, lidar_path],
-            }
-        )
+                    "parameters": [container_data_dir_path, lidar_rpath],
+                }
+            )
 
-        execute_configs.append(
-            {
-                "name": "ab3dmot",
-                # adding the volume "/workspace/data:/workspace/AB3DMOT/data" might work
-            }
-        )
+            # TODO: Add in when code done
+            # execute_configs.append(
+            #     {
+            #         "name": "ab3dmot",
+            #         # adding the volume "/workspace/data:/workspace/AB3DMOT/data" might work
+            #     }
+            # )
+
+            # TODO: Add in when code done
+            # execute_configs.append(
+            #     {
+            #         "name": "sequencer",
+            #         # todo
+            #     }
+            # )
 
     return execute_configs
 
 
 def _build_image(client, build_config):
-    image, build_logs = client.images.build(
-        path=".",
+    build_logs = client.api.build(
+        path=str(PROJECT_ROOT),
         dockerfile=build_config["dockerfile"],
         tag=build_config["image_name"],
         rm=True,
+        decode=True,
     )
+
+    image_id = None
 
     for chunk in build_logs:
         if "stream" in chunk:
-            print(chunk["stream"], end="")
-        elif "error" in chunk:
+            print(chunk["stream"], end="", flush=True)
+
+        if "status" in chunk:
+            progress = chunk.get("progress", "")
+            print(
+                f"{chunk['status']} {progress}",
+                flush=True,
+            )
+
+        if "aux" in chunk:
+            image_id = chunk["aux"].get("ID", image_id)
+
+        if "error" in chunk:
             raise RuntimeError(chunk["error"])
 
+        if "errorDetail" in chunk:
+            message = chunk["errorDetail"].get(
+                "message",
+                str(chunk["errorDetail"]),
+            )
+            raise RuntimeError(message)
 
-def _create_container_kwargs(execute_config):
+    try:
+        return client.images.get(build_config["image_name"])
+    except docker.errors.ImageNotFound as exc:
+        raise RuntimeError(f"Build completed but image {build_config['image_name']} was not found") from exc
+
+
+def _create_container_kwargs(execute_config, build_config):
     container_kwargs = {
-        "image": execute_config["image_name"],
+        "image": build_config["image_name"],
         "volumes": {
             **(execute_config.get("volumes", {})),
-            **{
-                os.path.join(PROJECT_ROOT, "data"): {
-                    "bind": DOCKER_DATA_BIND,
-                    "mode": "rw",
-                },
-                os.path.join(PROJECT_ROOT, "src"): {
-                    "bind": DOCKER_SRC_BIND,
-                    "mode": "rw",
-                },
+            os.path.join(PROJECT_ROOT, "data"): {
+                "bind": DOCKER_DATA_BIND,
+                "mode": "rw",
+            },
+            os.path.join(PROJECT_ROOT, "src"): {
+                "bind": DOCKER_SRC_BIND,
+                "mode": "rw",
             },
         },
         "environment": {
             **execute_config.get("environment", {}),
-            **{
-                "PYTHONPATH": DOCKER_WORKSPACE,
-            },
+            "PYTHONPATH": DOCKER_WORKSPACE,
+            "PYTHONUNBUFFERED": "1",
         },
-        "remove": True,
-        "detach": True,
+        "remove": False,
+        "detach": True
     }
 
     if "parameters" in execute_config:
         container_kwargs["command"] = execute_config["parameters"]
 
     if "gpu" in execute_config and execute_config["gpu"]:
-        container_kwargs["device_requests"] = [
-            docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])
-        ]
+        container_kwargs["device_requests"] = [docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
     return container_kwargs
 
 
-def _log_container(container, name: str):
+def _log_container(container, name: str) -> None:
     try:
-        for line in container.logs(stream=True):
-            print(line.decode(errors="replace"), end="")
+        for raw_line in container.logs(
+            stream=True,
+            follow=True,
+            stdout=True,
+            stderr=True,
+        ):
+            line = raw_line.decode("utf-8", errors="replace")
+            print(f"[{name}] {line}", end="", flush=True)
 
         result = container.wait()
         status = result["StatusCode"]
@@ -248,45 +238,51 @@ def _log_container(container, name: str):
     finally:
         try:
             container.remove(force=True)
-        except Exception:
+        except docker.errors.NotFound:
             pass
+        except docker.errors.APIError as exc:
+            # Do not let a cleanup problem hide the real container error.
+            print(f"[{name}] Warning: failed to remove container: {exc}", flush=True)
 
 
 def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int = -1):
     client = docker.from_env()
 
-    # delete_data_intermediate_dir()
+    delete_data_intermediate_dir()
 
     # build
     n = len(execute_configs)
-    for i, execute_config in enumerate(execute_configs):
+    for i, execute_config in enumerate(execute_configs, start=1):
         name = execute_config["name"]
+        build_config = build_configs[name]
 
-        log_header = (
-            ">>> main.py " + f"dir:{dir_i if dir_i >= 0 else ''}" + f"step:{i}/{n}"
-        )
+        log_header = ">>> main.py " + (f"dir:{dir_i} " if dir_i >= 0 else "") + f"step:{i}/{n}"
 
-        print(f"{log_header}: building {name}")
-        _build_image(client, build_configs[name])
+        # build if not built
+        if name not in BUILT_IMAGES:
+            print(f"{log_header} % building {name}", flush=True)
+            _build_image(client, build_config)
+
+            BUILT_IMAGES.append(name)
 
         # run
-        print(f"{log_header}: running {name}")
-        container_kwargs = _create_container_kwargs(execute_config)
+        print(f"{log_header} % running {name}", flush=True)
+        container_kwargs = _create_container_kwargs(execute_config, build_config)
         container = client.containers.run(**container_kwargs)
 
         _log_container(container, name)
 
-    # delete_data_intermediate_dir()
+    # delete_data_intermediate_dir() # TODO: Add back inn
 
 
 if __name__ == "__main__":
-    data_dir_paths = _get_arguements()
+    data_dir_paths, no_execute_flags = _parse_arguments()
 
-    _verify_data_dirs(data_dir_paths)
+    verify_data_dirs(data_dir_paths)
 
     build_configs = _get_build_configs()
 
     for dir_i, data_dir_path in enumerate(data_dir_paths):
-        execute_configs = _get_execute_configs(data_dir_path)
+        execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
 
         _run_substeps(build_configs, execute_configs, dir_i)

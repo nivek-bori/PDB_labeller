@@ -1,10 +1,10 @@
 import numpy as np
 from filterpy.kalman import KalmanFilter
 import os
-import pandas as pd
 from pandas import DataFrame
 from src.misc.constants import (
 	EARTH_RADIUS_M,
+	GPS_CSV_SKIP_ROWS,
 	OXTS_DEFAULT_VALUES,
 	RAW_GPS_COL_ACCELERATION_FORWARD,
 	RAW_GPS_COL_ACCELERATION_LATERAL,
@@ -14,29 +14,11 @@ from src.misc.constants import (
 	RAW_GPS_COL_TIME,
 	RAW_GPS_COL_VELOCITY_FORWARD,
 	RAW_GPS_COL_VELOCITY_LATERAL,
-	GPS_CSV_SKIP_ROWS,
 	GPS_STD,
 	NS_PER_SECOND,
 )
-from src.misc.io import safe_makedirs
+from src.misc.io import load_csv, load_metadata, safe_makedirs
 import csv
-from typing import Union
-
-
-def _load_gps_dataframe(gps_file_path: str) -> DataFrame:
-	try:
-		gps_dataframe = pd.read_csv(
-			gps_file_path,
-			skiprows=GPS_CSV_SKIP_ROWS,
-			skipinitialspace=True,
-			dtype={
-				RAW_GPS_COL_TIME: "int64",
-			},
-		)
-	except Exception as e:
-		raise RuntimeError(f"Failed to load GPS data from '{gps_file_path}': {e}")
-
-	return gps_dataframe
 
 
 def _format_gpd_dataframe(gps_dataframe: DataFrame):
@@ -260,9 +242,11 @@ def _write_oxts_txt(gps_dataset: dict[str, any]):
 			f.write(row_str + "\n")
 
 
-def main(data_dir_path: str, gps_file_path: str):
+def main(data_dir_path: str):
+	metadata = load_metadata(data_dir_path)
+	
 	# load & format data
-	raw_gps_dataframe = _load_gps_dataframe(os.path.join(data_dir_path, gps_file_path))
+	raw_gps_dataframe = load_csv(os.path.join(data_dir_path, metadata["gps_rpath"]), skip_rows=GPS_CSV_SKIP_ROWS)
 	gps_dataset = _format_gpd_dataframe(raw_gps_dataframe)
 
 	# apply kalman filter
@@ -284,11 +268,6 @@ if __name__ == "__main__":
 		type=str,
 		help="Path to the directory containing all data.",
 	)
-	parser.add_argument(
-		"gps_file_path",
-		type=str,
-		help="Path to the csv file containing the gps data relative to DATA_DIR_PATH.",
-	)
 	args = parser.parse_args()
 
 	# extract parameters
@@ -297,10 +276,5 @@ if __name__ == "__main__":
 		if "DATA_DIR_PATH" in os.environ
 		else args.data_dir_path
 	)
-	GPS_FILE_PATH = (
-		os.environ["GPS_FILE_PATH"]
-		if "GPS_FILE_PATH" in os.environ
-		else args.gps_file_path
-	)
 
-	main(DATA_DIR_PATH, GPS_FILE_PATH)
+	main(DATA_DIR_PATH)

@@ -38,6 +38,7 @@ def _convert_results(
     timestamp_results: list[tuple[str, UltralyticsResults]],
     driver_id: int,
 ) -> list[dict]:
+    
     detections = []
 
     for result_i, (timestamp, result) in enumerate(timestamp_results):
@@ -74,7 +75,7 @@ def _convert_results_to_csv(
     results: list[tuple[str, UltralyticsResults]],
     driver_id: int,
 ) -> list[list]:
-    rows = _convert_results(dir_name, results)
+    rows = _convert_results(dir_name, results, driver_id)
 
     return [IMAGE_COLUMNS] + [[row[column] for column in IMAGE_COLUMNS] for row in rows]
 
@@ -127,29 +128,23 @@ def _write_parquet(path: str, rows: list[dict]):
     pq.write_table(table, path)
 
 
-def main(data_dir_path: str, img_source_path: str, output_format: str = "parquet"):
+def main(data_dir_path: str, img_dir_rpath: str, output_format: str = "parquet"):
     metadata = load_metadata(data_dir_path)
 
     # run yolo
-    timestamps, img_paths = get_filenames_and_paths(
-        os.path.join(data_dir_path, img_source_path), IMAGE_EXTENSIONS
-    )
+    timestamps, img_paths = get_filenames_and_paths(os.path.join(data_dir_path, img_dir_rpath), IMAGE_EXTENSIONS)
 
     cam_results = _get_cam_results(img_paths)
     all_results = list(zip(timestamps, cam_results))
 
     # format & save results
-    write_path = os.path.join("data/processed", img_source_path)
+    write_path = os.path.join("data/processed", img_dir_rpath)
     if output_format in ("csv", "both"):
-        csv_results = _convert_results_to_csv(
-            img_source_path, all_results, metadata["driver_id"]
-        )
+        csv_results = _convert_results_to_csv(img_dir_rpath, all_results, metadata["driver_id"])
         _write_csv(os.path.join(write_path, "image.csv"), csv_results)
 
     if output_format in ("parquet", "both"):
-        parquet_results = _convert_results_to_parquet(
-            img_source_path, all_results, metadata["driver_id"]
-        )
+        parquet_results = _convert_results_to_parquet(img_dir_rpath, all_results, metadata["driver_id"])
         _write_parquet(os.path.join(write_path, "image.parquet"), parquet_results)
 
 
@@ -157,31 +152,21 @@ if __name__ == "__main__":
     import argparse
 
     # parse args
-    parser = argparse.ArgumentParser(
-        description="Save YOLO detection and tracking results on camera images."
-    )
+    parser = argparse.ArgumentParser(description="Save YOLO detection and tracking results on camera images.")
     parser.add_argument(
         "data_dir_path",
         type=str,
         help="Path to the directory containing all data.",
     )
     parser.add_argument(
-        "img_source_path",
+        "img_dir_rpath",
         type=str,
         help="Path to the directory containing image files relative to DATA_DIR_PATH.",
     )
     args = parser.parse_args()
 
     # extract parameters
-    DATA_DIR_PATH = (
-        os.environ["DATA_DIR_PATH"]
-        if "DATA_DIR_PATH" in os.environ
-        else args.data_dir_path
-    )
-    IMG_SOURCE_PATH = (
-        os.environ["IMG_SOURCE_PATH"]
-        if "IMG_SOURCE_PATH" in os.environ
-        else args.img_source_path
-    )
+    DATA_DIR_PATH = os.environ["DATA_DIR_PATH"] if "DATA_DIR_PATH" in os.environ else args.data_dir_path
+    img_dir_rpath = os.environ["img_dir_rpath"] if "img_dir_rpath" in os.environ else args.img_dir_rpath
 
-    main(DATA_DIR_PATH, IMG_SOURCE_PATH)
+    main(DATA_DIR_PATH, img_dir_rpath)

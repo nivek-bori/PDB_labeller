@@ -35,7 +35,12 @@ RUN pip install -r requirements.txt
 RUN MAX_JOBS=5 pip install -e . --no-build-isolation
 
 # install additional dependencies
-RUN pip install av2==0.3.6 gdown numpy==1.26.4 open3d==0.19.0
+RUN pip install av2==0.3.6 gdown open3d==0.19.0
+
+COPY src/requirements.txt /workspace/requirements.txt
+COPY src/openpcdet/requirements.txt /workspace/openpcdet_requirements.txt
+RUN pip install -r /workspace/requirements.txt && \
+    pip install -r /workspace/openpcdet_requirements.txt
 
 # download model
 RUN mkdir -p /workspace/models && \

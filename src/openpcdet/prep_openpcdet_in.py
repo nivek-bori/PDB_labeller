@@ -66,8 +66,8 @@ def _write_image_sets(path, timestamps):
 				f.write(txt_str)
 
 
-def main(data_dir_path: str, lidar_source_path: str):
-    timestamps, lidar_paths = get_filenames_and_paths(os.path.join(data_dir_path, lidar_source_path), LIDAR_EXTENSIONS)
+def main(data_dir_path: str, lidar_dir_rpath: str):
+    timestamps, lidar_paths = get_filenames_and_paths(os.path.join(data_dir_path, lidar_dir_rpath), LIDAR_EXTENSIONS)
 
     # load & clean data
     lidar_dataset = _load_lidar_from_bin(lidar_paths)
@@ -82,8 +82,8 @@ def main(data_dir_path: str, lidar_source_path: str):
     _write_image_sets(write_path, timestamps)
     write_config(
         write_path,
-        create_dataset_config(lidar_source_path, data_range),
-        create_pointpillars_config(lidar_source_path, data_range),
+        create_dataset_config(lidar_dir_rpath, data_range),
+        create_pointpillars_config(lidar_dir_rpath, data_range),
     )
 
 
@@ -100,22 +100,22 @@ if __name__ == "__main__":
 				help="Path to the directory containing all data.",
 		)
 		parser.add_argument(
-				"lidar_source_path",
+				"lidar_dir_rpath",
 				type=str,
 				help="Path to the directory containing lidar (.bin) files relative to DATA_DIR_PATH.",
 		)
 		args = parser.parse_args()
 
 				# extract parameters
-		DATA_DIR_PATH = (
+		data_dir_path = (
 				os.environ["DATA_DIR_PATH"]
 				if "DATA_DIR_PATH" in os.environ
 				else args.data_dir_path
 		)
-		LIDAR_SOURCE_PATH = (
-				os.environ["LIDAR_SOURCE_PATH"]
-				if "LIDAR_SOURCE_PATH" in os.environ
-				else args.lidar_source_path
+		lidar_dir_rpath = (
+				os.environ["lidar_dir_rpath"]
+				if "lidar_dir_rpath" in os.environ
+				else args.lidar_dir_rpath
 		)
 
-		main(DATA_DIR_PATH, LIDAR_SOURCE_PATH)
+		main(data_dir_path, lidar_dir_rpath)

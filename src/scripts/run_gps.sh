@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prefer positional arguments over environment variables
+# Prefer positional argument over environment variable
 DATA_DIR_PATH_ARG="${1:-}"
-GPS_FILE_PATH_ARG="${2:-}"
 
 if [[ -n "$DATA_DIR_PATH_ARG" ]]; then
     DATA_DIR_PATH="$DATA_DIR_PATH_ARG"
@@ -14,13 +13,4 @@ else
     exit 1
 fi
 
-if [[ -n "$GPS_FILE_PATH_ARG" ]]; then
-    GPS_FILE_PATH="$GPS_FILE_PATH_ARG"
-elif [[ -n "${GPS_FILE_PATH:-}" ]]; then
-    GPS_FILE_PATH="$GPS_FILE_PATH"
-else
-    echo "ERROR: GPS_FILE_PATH environment variable or position 2 argument must be set." >&2
-    exit 1
-fi
-
-exec python -m src.gps.gps "$DATA_DIR_PATH" "$GPS_FILE_PATH"
+exec python -m src.gps.gps "$DATA_DIR_PATH"

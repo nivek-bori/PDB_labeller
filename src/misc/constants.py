@@ -14,7 +14,7 @@ PDB_TO_KITTI = {
     "Cyclist": "Cyclist",
 }
 
- = {
+CLASS_LABEL_NAME_TO_ID = {
     "Vehicle": 1,
     "Car": 1,
     "Pedestrian": 2,
@@ -125,4 +125,11 @@ DOCKER_SRC_BIND = f"{DOCKER_WORKSPACE}/src"
 DOCKER_MODELS_BIND = f"{DOCKER_WORKSPACE}/models"
 
 # Data
-METADATA_REQUIRED_KEYS = ["lidar_paths", "image_paths", "driver_id"]
+METADATA_REQUIRED_KEYS = ["driver_id"]
+METADATA_DEFAULTS = {
+    "lidar_rpaths": None,
+    "image_rpaths": None,
+    "gps_rpath": "gps.csv",
+    "canbus_rpath": "canbus.json",
+    "sampling_hertz": 5,
+}
