@@ -1,8 +1,9 @@
 import os
-from pathlib import Path
 import docker
 import argparse
+import platform
 
+from pathlib import Path
 from src.misc.constants import (
     DOCKER_DATA_BIND,
     DOCKER_MODELS_BIND,
@@ -14,6 +15,7 @@ from src.misc.io import delete_data_intermediate_dir, load_metadata, verify_data
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 BUILT_IMAGES = []
+DOCKER_PLATFORM = "linux/amd64" if platform.system() == "Darwin" else None
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -44,6 +46,8 @@ def _parse_arguments() -> argparse.Namespace:
         help="Do not process LiDAR data.",
     )
 
+    parser.add_argument("--build_only", action="store_true", help="Only build images.")
+
     args = parser.parse_args()
 
     paths_string = os.environ.get("PATHS_TO_DATA", args.paths_to_data)
@@ -52,8 +56,9 @@ def _parse_arguments() -> argparse.Namespace:
 
     paths_to_data = [path.strip() for path in paths_string.split(";") if path.strip()]
     flags = [flag for flag in ["no_gps", "no_image", "no_lidar"] if getattr(args, flag)]
+    only_build = args.build_only
 
-    return paths_to_data, flags
+    return paths_to_data, flags, only_build
 
 
 def _to_container_data_path(host_path: str | Path) -> str:
@@ -63,9 +68,7 @@ def _to_container_data_path(host_path: str | Path) -> str:
     try:
         relative_path = resolved_path.relative_to(host_data_root)
     except ValueError as exc:
-        raise ValueError(
-            f"Path must be inside {host_data_root}: {resolved_path}"
-        ) from exc
+        raise ValueError(f"Path must be inside {host_data_root}: {resolved_path}") from exc
 
     return str(Path(DOCKER_DATA_BIND) / relative_path)
 
@@ -134,25 +137,24 @@ def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> lis
             #     }
             # )
 
-            # TODO: Add in when code done
-            # execute_configs.append(
-            #     {
-            #         "name": "sequencer",
-            #         # todo
-            #     }
-            # )
-
     return execute_configs
 
 
-def _build_image(client, build_config):
-    build_logs = client.api.build(
-        path=str(PROJECT_ROOT),
-        dockerfile=build_config["dockerfile"],
-        tag=build_config["image_name"],
-        rm=True,
-        decode=True,
-    )
+def _build_image(build_config):
+    client = docker.from_env()
+
+    build_kwargs = {
+        "path": str(PROJECT_ROOT),
+        "dockerfile": build_config["dockerfile"],
+        "tag": build_config["image_name"],
+        "rm": True,
+        "decode": True,
+    }
+
+    if DOCKER_PLATFORM:
+        build_kwargs["platform"] = DOCKER_PLATFORM
+
+    build_logs = client.api.build(**build_kwargs)
 
     image_id = None
 
@@ -206,19 +208,26 @@ def _create_container_kwargs(execute_config, build_config):
             "PYTHONUNBUFFERED": "1",
         },
         "remove": False,
-        "detach": True
+        "detach": True,
     }
 
     if "parameters" in execute_config:
         container_kwargs["command"] = execute_config["parameters"]
 
-    if "gpu" in execute_config and execute_config["gpu"]:
+    if execute_config.get("gpu"):
         container_kwargs["device_requests"] = [docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])]
+
+    if DOCKER_PLATFORM:
+        container_kwargs["platform"] = DOCKER_PLATFORM
 
     return container_kwargs
 
 
-def _log_container(container, name: str) -> None:
+def _run_container(name: str, **container_kwargs) -> None:
+    client = docker.from_env()
+
+    container = client.containers.run(**container_kwargs)
+
     try:
         for raw_line in container.logs(
             stream=True,
@@ -246,8 +255,6 @@ def _log_container(container, name: str) -> None:
 
 
 def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int = -1):
-    client = docker.from_env()
-
     delete_data_intermediate_dir()
 
     # build
@@ -261,28 +268,41 @@ def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int =
         # build if not built
         if name not in BUILT_IMAGES:
             print(f"{log_header} % building {name}", flush=True)
-            _build_image(client, build_config)
+            _build_image(build_config)
 
             BUILT_IMAGES.append(name)
 
         # run
         print(f"{log_header} % running {name}", flush=True)
         container_kwargs = _create_container_kwargs(execute_config, build_config)
-        container = client.containers.run(**container_kwargs)
-
-        _log_container(container, name)
+        _run_container(name, **container_kwargs)
 
     # delete_data_intermediate_dir() # TODO: Add back inn
 
 
 if __name__ == "__main__":
-    data_dir_paths, no_execute_flags = _parse_arguments()
+    data_dir_paths, no_execute_flags, only_build = _parse_arguments()
+
+    data_dir_paths, no_execute_flags, only_build = _parse_arguments()
 
     verify_data_dirs(data_dir_paths)
 
     build_configs = _get_build_configs()
 
-    for dir_i, data_dir_path in enumerate(data_dir_paths):
-        execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
+    if DOCKER_PLATFORM:
+        print(f">>> macOS detected: using Docker platform {DOCKER_PLATFORM}", flush=True)
 
-        _run_substeps(build_configs, execute_configs, dir_i)
+    if only_build:
+        for name in build_configs:
+            no_gps = name == "gps" and "no_gps" in no_execute_flags
+            no_image = name == "image" and "no_image" in no_execute_flags
+            no_lidar = name in ["openpcdet", "ab3dmot"] and "no_lidar" in no_execute_flags
+
+            if not (no_gps or no_image or no_lidar):
+                _build_image(build_configs[name])
+    else:
+        # execute and build images on demand
+        for dir_i, data_dir_path in enumerate(data_dir_paths):
+            execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
+
+            _run_substeps(build_configs, execute_configs, dir_i)

@@ -9,6 +9,7 @@ data/processed/*
 !data/processed/.gitkeep
 data/intermediate/*
 !data/intermediate/.gitkeep
-/models/
+models/
+tmp/
 
 *.pyc

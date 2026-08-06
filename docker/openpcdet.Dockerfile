@@ -26,7 +26,7 @@ RUN pip install --upgrade pip setuptools wheel
 
 # install OpenPCDet
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
-RUN pip install cumm-cu117 spconv-cu117
+RUN pip install spconv-cu117
 
 RUN git clone https://github.com/open-mmlab/OpenPCDet.git
 WORKDIR /workspace/OpenPCDet

@@ -1,7 +1,7 @@
 import os
 import json
 from src.misc.constants import IMAGE_EXTENSIONS, LIDAR_EXTENSIONS, METADATA_DEFAULTS, METADATA_DEFAULTS, METADATA_REQUIRED_KEYS
-from src.misc.time import get_ns_timestamp
+from src.misc.conversion import get_ns_timestamp
 from pandas import DataFrame
 from pathlib import Path
 from collections.abc import Iterable
