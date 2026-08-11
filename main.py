@@ -18,14 +18,14 @@ BUILT_IMAGES = []
 DOCKER_PLATFORM = "linux/amd64" if platform.system() == "Darwin" else None
 
 
-def _parse_arguments() -> argparse.Namespace:
+def _parse_arguments() -> tuple[list[str], list[str], bool]:
     parser = argparse.ArgumentParser(description="Auto-label PDB data")
 
     parser.add_argument(
         "paths_to_data",
-        nargs="?",
+        nargs="*",
         type=str,
-        help="Paths to driving session data, separated by a semicolon.",
+        help="Paths to driving session data.",
     )
 
     parser.add_argument(
@@ -49,14 +49,16 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--build_only", action="store_true", help="Only build images.")
 
     args = parser.parse_args()
+    
+    only_build = args.build_only
 
     paths_string = os.environ.get("PATHS_TO_DATA", args.paths_to_data)
+    if only_build: # no need for paths
+        paths_string = []
     if not paths_string:
         parser.error("paths_to_data must be provided either as a command-line argument or through the PATHS_TO_DATA environment variable.")
 
-    paths_to_data = [path.strip() for path in paths_string.split(";") if path.strip()]
     flags = [flag for flag in ["no_gps", "no_image", "no_lidar"] if getattr(args, flag)]
-    only_build = args.build_only
 
     return paths_to_data, flags, only_build
 
@@ -73,7 +75,7 @@ def _to_container_data_path(host_path: str | Path) -> str:
     return str(Path(DOCKER_DATA_BIND) / relative_path)
 
 
-def _get_build_configs() -> list[dict]:
+def _get_build_configs() -> dict[str, dict]:
     BUILD_CONFIGS = {
         "gps": {
             "dockerfile": "docker/gps.Dockerfile",
@@ -281,8 +283,6 @@ def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int =
 
 
 if __name__ == "__main__":
-    data_dir_paths, no_execute_flags, only_build = _parse_arguments()
-
     data_dir_paths, no_execute_flags, only_build = _parse_arguments()
 
     verify_data_dirs(data_dir_paths)
