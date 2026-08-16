@@ -1,7 +1,10 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -22,13 +25,21 @@ COPY src/gps/requirements.txt /workspace/gps_requirements.txt
 RUN pip install -r /workspace/requirements.txt && \
     pip install -r /workspace/gps_requirements.txt
 
-# copy source code
-COPY src /workspace/src
+# copy execution scriopt
 COPY src/scripts/run_gps.sh /workspace/run_gps.sh
-
-# execute
 RUN chmod +x /workspace/run_gps.sh
+    
+# user
+ARG HOST_UID=1000
+ARG HOST_GID=1000
 
-WORKDIR /workspace
+RUN groupadd --gid "${HOST_GID}" dockeruser && \
+    useradd --uid "${HOST_UID}" --gid "${HOST_GID}" --create-home --shell /bin/bash dockeruser
+RUN chown -R "${HOST_UID}:${HOST_GID}" /workspace
+RUN git config --system --add safe.directory /workspace/OpenPCDet
+ENV HOME=/home/dockeruser
 
+USER dockeruser
+
+    # execute
 ENTRYPOINT ["/workspace/run_gps.sh"]

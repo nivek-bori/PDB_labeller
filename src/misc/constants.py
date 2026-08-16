@@ -14,12 +14,21 @@ PDB_TO_KITTI = {
     "Cyclist": "Cyclist",
 }
 
-CLASS_LABEL_NAME_TO_ID = {
-    "Vehicle": 1,
-    "Car": 1,
-    "Pedestrian": 2,
-    "Cyclist": 3,
+OPENPCDET_TO_AB3DMOT = {
+    1: 2,
+    2: 1,
+    3: 3,
 }
+
+AB3DMOT_ID_TO_NAME = {
+    1: "Pedestrian",
+    2: "Car",
+    3: "Cyclist",
+}
+
+KITTI_CLASS_ID_TO_NAME = ["Car", "Pedestrian", "Cyclist"]
+
+IMAGE_OUTPUT_FORMAT = "parquet"
 
 IMAGE_COLUMNS = [
     "camera_name",
@@ -114,6 +123,15 @@ OXTS_DEFAULT_VALUES = {
 LIDAR_RANGE_PERCENTILES = (0.1, 99.9)
 LIDAR_POINT_DIM = 4
 
+POINTPILLARS_POINT_CLOUD_RANGE = [
+    0.0,
+    -39.68,
+    -3.0,
+    69.12,
+    39.68,
+    1.0,
+]
+
 # Time
 NS_PER_SECOND = 1_000_000_000
 NS_TIMESTAMP_THRESHOLD = 1e14
@@ -127,8 +145,9 @@ DOCKER_MODELS_BIND = f"{DOCKER_WORKSPACE}/models"
 # Data
 METADATA_REQUIRED_KEYS = ["driver_id"]
 METADATA_DEFAULTS = {
-    "lidar_rpaths": None,
     "image_rpaths": None,
+    "lidar_rpaths": None,
+    "lidar_transformations": None,
     "gps_rpath": "gps.csv",
     "canbus_rpath": "canbus.json",
     "sampling_hertz": 5,

@@ -1,11 +1,8 @@
 import os
-from src.misc.constants import (
-    IMAGE_COLUMNS,
-    IMAGE_EXTENSIONS,
-    YOLO_MODEL_PATH,
-    YOLO_TO_PDB,
-    YOLO_TRACKER,
-)
+import argparse
+from pathlib import Path
+from src.misc.constants import IMAGE_COLUMNS, IMAGE_EXTENSIONS, YOLO_MODEL_PATH, YOLO_TO_PDB, YOLO_TRACKER, IMAGE_OUTPUT_FORMAT
+from ultralytics import YOLO
 from ultralytics.engine.results import Results as UltralyticsResults
 from src.misc.io import (
     get_filenames_and_paths,
@@ -14,22 +11,49 @@ from src.misc.io import (
 )
 
 
-def _load_yolo_model(model_name):
-    from ultralytics import YOLO
-    from ultralytics.utils import LOGGER
+def _parse_arguements():
+    # parse args
+    parser = argparse.ArgumentParser(description="Save YOLO detection and tracking results on camera images.")
+    parser.add_argument(
+        "data_dir_path",
+        type=str,
+        help="Path to the directory containing all data.",
+    )
+    parser.add_argument(
+        "img_rpath_index",
+        type=str,
+        help="Index of image relative path in metadata.",
+    )
+    args = parser.parse_args()
 
-    LOGGER.setLevel("ERROR")
+    # extract parameters
+    data_dir_path = os.environ.get("DATA_DIR_PATH", args.data_dir_path)
+    img_rpath_index = int(os.environ.get("IMG_RPATH_INDEX", args.img_rpath_index))
 
-    model = YOLO(model_name, verbose=False)
-    model.eval()
+    return data_dir_path, img_rpath_index
+
+
+def _load_yolo_model(model_path) -> YOLO:
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    model_path = os.path.join(PROJECT_ROOT, model_path)
+
+    # model exists 
+    if os.path.isfile(model_path):
+        print(f"Loading existing model: {model_path}")
+        return YOLO(str(model_path), verbose=False)
+
+    # download model
+    model = YOLO(str(model_path), verbose=False)
+
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"Ultralytics did not create the expected model file: {model_path}")
+
     return model
 
 
 def _get_cam_results(img_paths: str) -> list[UltralyticsResults]:
     model = _load_yolo_model(YOLO_MODEL_PATH)
-
     results: list[UltralyticsResults] = model.track(img_paths, tracker=YOLO_TRACKER)
-
     return results
 
 
@@ -68,6 +92,7 @@ def _convert_results(
             )
 
     return detections
+
 
 
 def _convert_results_to_csv(
@@ -128,45 +153,30 @@ def _write_parquet(path: str, rows: list[dict]):
     pq.write_table(table, path)
 
 
-def main(data_dir_path: str, img_dir_rpath: str, output_format: str = "parquet"):
+def main():
+    data_dir_path, img_rpath_index = _parse_arguements()
     metadata = load_metadata(data_dir_path)
+    img_dir_rpath = metadata["image_rpaths"][img_rpath_index]
 
     # run yolo
-    timestamps, img_paths = get_filenames_and_paths(os.path.join(data_dir_path, img_dir_rpath), IMAGE_EXTENSIONS)
+    img_dir_path = os.path.join(data_dir_path, img_dir_rpath)
+    timestamps, img_paths = get_filenames_and_paths(img_dir_path, IMAGE_EXTENSIONS)
+
+    assert len(img_paths) > 0, f"No image files in {data_dir_path}'s {img_rpath_index}th image directory path"
 
     cam_results = _get_cam_results(img_paths)
     all_results = list(zip(timestamps, cam_results))
 
     # format & save results
     write_path = os.path.join("data/processed", img_dir_rpath)
-    if output_format in ("csv", "both"):
+    if IMAGE_OUTPUT_FORMAT in ("csv", "both"):
         csv_results = _convert_results_to_csv(img_dir_rpath, all_results, metadata["driver_id"])
         _write_csv(os.path.join(write_path, "image.csv"), csv_results)
 
-    if output_format in ("parquet", "both"):
+    if IMAGE_OUTPUT_FORMAT in ("parquet", "both"):
         parquet_results = _convert_results_to_parquet(img_dir_rpath, all_results, metadata["driver_id"])
         _write_parquet(os.path.join(write_path, "image.parquet"), parquet_results)
 
 
 if __name__ == "__main__":
-    import argparse
-
-    # parse args
-    parser = argparse.ArgumentParser(description="Save YOLO detection and tracking results on camera images.")
-    parser.add_argument(
-        "data_dir_path",
-        type=str,
-        help="Path to the directory containing all data.",
-    )
-    parser.add_argument(
-        "img_dir_rpath",
-        type=str,
-        help="Path to the directory containing image files relative to DATA_DIR_PATH.",
-    )
-    args = parser.parse_args()
-
-    # extract parameters
-    DATA_DIR_PATH = os.environ["DATA_DIR_PATH"] if "DATA_DIR_PATH" in os.environ else args.data_dir_path
-    img_dir_rpath = os.environ["img_dir_rpath"] if "img_dir_rpath" in os.environ else args.img_dir_rpath
-
-    main(DATA_DIR_PATH, img_dir_rpath)
+    main()

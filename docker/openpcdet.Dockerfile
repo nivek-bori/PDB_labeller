@@ -1,17 +1,19 @@
-FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 WORKDIR /workspace
 
 ENV CUDA_HOME=/usr/local/cuda
-ENV TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6"
+ENV TORCH_CUDA_ARCH_LIST="12.0"
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
 
 # python dependencies
 RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    git build-essential cmake ninja-build curl \
-    libgl1 libglib2.0-0 \
+    software-properties-common git build-essential cmake ninja-build curl \
+    pkg-config libcairo2-dev libgl1 libglib2.0-0 \
     && add-apt-repository ppa:deadsnakes/ppa -y \
     && apt-get update && apt-get install -y \
     python3.9 python3.9-dev python3.9-distutils \
@@ -22,37 +24,59 @@ RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 RUN ln -sf /usr/bin/python3.9 /usr/bin/python && \
     ln -sf /usr/local/bin/pip /usr/bin/pip
 
-RUN pip install --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# install OpenPCDet
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
-RUN pip install spconv-cu117
-
-RUN git clone https://github.com/open-mmlab/OpenPCDet.git
-WORKDIR /workspace/OpenPCDet
-
-RUN pip install -r requirements.txt
-RUN MAX_JOBS=5 pip install -e . --no-build-isolation
-
-# install additional dependencies
-RUN pip install av2==0.3.6 gdown open3d==0.19.0
-
-COPY src/requirements.txt /workspace/requirements.txt
-COPY src/openpcdet/requirements.txt /workspace/openpcdet_requirements.txt
-RUN pip install -r /workspace/requirements.txt && \
-    pip install -r /workspace/openpcdet_requirements.txt
+# clone OpenPCDet && remove error causes
+RUN git clone https://github.com/open-mmlab/OpenPCDet.git /workspace/OpenPCDet \
+    && sed -i '/from \.argo2\.argo2_dataset import Argo2Dataset/d' \
+       /workspace/OpenPCDet/pcdet/datasets/__init__.py \
+    && sed -i "/['\"]Argo2Dataset['\"]: Argo2Dataset/d" \
+       /workspace/OpenPCDet/pcdet/datasets/__init__.py
 
 # download model
+RUN pip install gdown
 RUN mkdir -p /workspace/models && \
     gdown --fuzzy "https://drive.google.com/file/d/1wMxWTpU1qUoY3DsCH31WJmvJxcjFXKlm/view" \
     -O /workspace/models/pointpillars.pth
 
-# execute script
-WORKDIR /workspace
+# install OpenPCCDet dependencies
+RUN pip install --no-cache-dir --ignore-installed blinker av2==0.3.6 open3d==0.19.0 pycairo==1.28.0 spconv==2.3.8
+RUN pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 
-COPY src /workspace/src
+WORKDIR /workspace/OpenPCDet
+RUN sed -i 's/^opencv-python$/opencv-python==4.10.0.84/' /workspace/OpenPCDet/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# install src dependencies
+COPY src/requirements.txt /workspace/src/requirements.txt
+COPY src/openpcdet/requirements.txt /workspace/src/openpcdet/requirements.txt
+RUN pip install --no-cache-dir -r /workspace/src/requirements.txt && \
+    pip install --no-cache-dir -r /workspace/src/openpcdet/requirements.txt
+
+# TODO: REMOVE
+RUN pip show torch torchvision torchaudio && \
+    pip check
+RUN python -c "import torch; import torchvision; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torch CUDA:', torch.version.cuda); print('architectures:', torch.cuda.get_arch_list()); from torchvision.ops import nms; print('torchvision NMS OK')"
+
+# compile OpenPCDet
+WORKDIR /workspace/OpenPCDet
+RUN MAX_JOBS=32 pip install --no-cache-dir -e . --no-build-isolation
+
+# copy execution script
 COPY src/scripts/run_openpcdet.sh /workspace/run_openpcdet.sh
-
 RUN chmod +x /workspace/run_openpcdet.sh
 
+# create workspace user
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+RUN groupadd --gid "${HOST_GID}" dockeruser && \
+    useradd --uid "${HOST_UID}" --gid "${HOST_GID}" --create-home --shell /bin/bash dockeruser
+RUN chown -R "${HOST_UID}:${HOST_GID}" /workspace
+RUN git config --system --add safe.directory /workspace/OpenPCDet
+ENV HOME=/home/dockeruser
+
+USER dockeruser
+
+# execute
 ENTRYPOINT ["/workspace/run_openpcdet.sh"]

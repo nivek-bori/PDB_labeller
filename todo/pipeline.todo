@@ -1,23 +1,11 @@
 Detailed Pipeline:
   Execution Script:
     ▫ Add final sequencer (separate into 50 frame / 10s @ 0.2HZ)
-
-  OpenPCDet:
-    ▫ Make OpenPCDet accept PDB data (python) @started(26-07-21 13:00) @blocked:run_pointpillars.requires_gpu
-      ▫ Review OpenPCDet code to understand format required @NEXT
-    ▫ Run PointPillars (Docker) @started(26-07-21 13:00) @blocked:requires_gpu
   
-  AB3DMOT:
-    ▫ Format openpcdet output into KITTI format for input (python) @started(26-07-11 15:56) @blocked:openpcdet.requires_gpu
-
   3D Trajectory Dataset:
     ▫ Load 3D Tracks and Processed GPS data (python)
       ▫ 3D Tracks: [timestamp, driver_id, track_id, class, x & y, z, vx, vy, heading, lenght, width, height] // xyz in local coordinates
       ▫ GPS: [timestamp, x & y, z] // xyz in global coordinates
-    ✔ Sort tracks & GPS by timestamp (python) @done(26-07-21 13:37)
-      ✔ Keep track of next same data: tracks[i].nextIdx = tracks[i+1].idx @done(26-07-21 13:33)
-      ✔ Remove tracks that are outside gps timestamps (track[i].t < gps[0].t or track[i].t > gps[n-1].t) @done(26-07-21 13:37)
-    ✔ Perform interpolation to align GPS timestamps to track timestamps (python) @done(26-07-21 14:15)
     ▫ Apply track transformation and convert to global coordinates (python)
       ▫ keep track.fblrud velocity in meters/s
       ▫ track.global_xyz = to_latlon(track.xyz) + gps.xyz
@@ -27,6 +15,14 @@ Detailed Pipeline:
     ▫ Store matched_gps in csv with [timestamp, x, y, z] // xyz in global coordinates (python)
 
 Finished: 
+  ✔ Format openpcdet output into KITTI format for input (python) @started(26-07-11 15:56) @done(26-08-15 22:27) @lasted(5w6h31m1s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ Make sure geometric units and meaning are the same: @started(26-08-15 22:27) @done(26-08-15 22:27) @lasted(1s) @project(Detailed Pipeline.AB3DMOT)
+  ✔ Make OpenPCDet accept PDB data (python) @started(26-07-21 13:00) @done(26-08-14 15:27) @lasted(3w3d2h27m24s) @project(Detailed Pipeline.OpenPCDet)
+  ✔ Run PointPillars (Docker) @started(26-07-21 13:00) @done(26-08-14 15:27) @lasted(3w3d2h27m29s) @project(Detailed Pipeline.OpenPCDet)
+  ✔ Sort tracks & GPS by timestamp (python) @done(26-07-21 13:37) @project(Detailed Pipeline.3D Trajectory Dataset)
+  ✔ Keep track of next same data: tracks[i].nextIdx = tracks[i+1].idx @done(26-07-21 13:33) @project(Detailed Pipeline.3D Trajectory Dataset)
+  ✔ Remove tracks that are outside gps timestamps (track[i].t < gps[0].t or track[i].t > gps[n-1].t) @done(26-07-21 13:37) @project(Detailed Pipeline.3D Trajectory Dataset)
+  ✔ Perform interpolation to align GPS timestamps to track timestamps (python) @done(26-07-21 14:15) @project(Detailed Pipeline.3D Trajectory Dataset)
   ✔ Add driver_id to everything (constants.IMAGE_COLUMNS, etc) @started(26-07-18 14:46) @done(26-07-18 14:46) @lasted(28s) @project(Detailed Pipeline.Overall)
   ✔ Reformat output and store in file (python) @started(26-07-11 15:55) @done(26-07-11 15:56) @lasted(1m1s) @project(Detailed Pipeline.AB3DMOT)
   ✔ remove images from AB3DMOT execution of PDB dataset @started(26-07-08 13:28) @done(26-07-08 17:28) @lasted(4h50s) @project(Detailed Pipeline.AB3DMOT)

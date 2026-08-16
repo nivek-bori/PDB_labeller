@@ -2,6 +2,7 @@ FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
 ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /workspace
@@ -21,12 +22,21 @@ RUN pip install -r /workspace/requirements.txt && \
 
 RUN pip install --upgrade pip setuptools wheel
 
-# copy source code
-COPY src /workspace/src
-COPY models /workspace/models
+# copy execution script
 COPY src/scripts/run_image.sh /workspace/run_image.sh
-
-# execute
 RUN chmod +x /workspace/run_image.sh
 
+# user
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+RUN groupadd --gid "${HOST_GID}" dockeruser && \
+    useradd --uid "${HOST_UID}" --gid "${HOST_GID}" --create-home --shell /bin/bash dockeruser
+RUN chown -R "${HOST_UID}:${HOST_GID}" /workspace
+RUN git config --system --add safe.directory /workspace/OpenPCDet
+ENV HOME=/home/dockeruser
+
+USER dockeruser
+
+# execute
 ENTRYPOINT ["/workspace/run_image.sh"]

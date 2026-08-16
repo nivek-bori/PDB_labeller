@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Prefer positional arguments over environment variables
 DATA_DIR_PATH_ARG="${1:-}"
-IMG_DIR_RPATH_ARG="${2:-}"
+IMG_RPATH_INDEX_ARG="${2:-}"
 
 if [[ -n "$DATA_DIR_PATH_ARG" ]]; then
     DATA_DIR_PATH="$DATA_DIR_PATH_ARG"
@@ -14,13 +14,13 @@ else
     exit 1
 fi
 
-if [[ -n "$IMG_DIR_RPATH_ARG" ]]; then
-    IMG_DIR_RPATH="$IMG_DIR_RPATH_ARG"
-elif [[ -n "${IMG_DIR_RPATH:-}" ]]; then
-    IMG_DIR_RPATH="$IMG_DIR_RPATH"
+if [[ -n "$IMG_RPATH_INDEX_ARG" ]]; then
+    IMG_RPATH_INDEX="$IMG_RPATH_INDEX_ARG"
+elif [[ -n "${IMG_RPATH_INDEX:-}" ]]; then
+    IMG_RPATH_INDEX="$IMG_RPATH_INDEX"
 else
-    echo "ERROR: IMG_DIR_RPATH environment variable or position 2 argument must be set." >&2
+    echo "ERROR: IMG_RPATH_INDEX environment variable or position 2 argument must be set." >&2
     exit 1
 fi
 
-exec python -m src.image.image "$DATA_DIR_PATH" "$IMG_DIR_RPATH"
+exec python -m src.image.inference "$DATA_DIR_PATH" "$IMG_RPATH_INDEX"

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PREPROCESS LIDAR
-
-# Prefer positional arguments over environment variables
+# parse arguements
 DATA_DIR_PATH_ARG="${1:-}"
 LIDAR_SOURCE_PATH_ARG="${2:-}"
 
@@ -25,19 +23,17 @@ else
     exit 1
 fi
 
+# preprocess lidar data
 echo "run_openpcdet.sh >>> preprocessing LIDAR data..."
-python -m src.openpcdet.prep_openpcdet_in "$DATA_DIR_PATH" "$LIDAR_SOURCE_PATH"
+python -m src.openpcdet.prep_input "$DATA_DIR_PATH" "$LIDAR_SOURCE_PATH"
 
-# OPENPCDET
-python -m openpcdet.datasets.custom.custom_dataset create_custom_infos openpcdet/tools/cfgs/dataset_configs/custom_dataset.yaml
-
+# execute inference
 echo "run_openpcdet.sh >>> running OpenPCDet..."
-cd /workspace/OpenPCDet
-
-python tools/test.py \
-  --cfg_file /workspace/data/intermediate/lidar/model.yaml \
+python /workspace/src/openpcdet/inference.py \
+  --cfg_file /workspace/data/intermediate/openpcdet/model.yaml \
   --ckpt /workspace/models/pointpillars.pth \
-  --batch_size 1 \
-  --workers 0
+  --data_path /workspace/data/intermediate/openpcdet/points \
+  --output_path /workspace/data/intermediate/openpcdet/detections \
+  --ext .npy
 
 echo "Done."

@@ -1,8 +1,8 @@
-FROM python:3.8-slim
+FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/workspace/AB3DMOT:/workspace/Xinshuo_PyToolbox:/workspace/src
+ENV PYTHONPATH=/workspace/AB3DMOT:/workspace/Xinshuo_PyToolbox:/workspace
 
 WORKDIR /workspace
 
@@ -23,42 +23,35 @@ RUN pip install --upgrade pip setuptools wheel
 # Clone AB3DMOT
 RUN git clone https://github.com/nivek-bori/AB3DMOT.git /workspace/AB3DMOT
 
-# Install AB3DMOT dependencies
-RUN pip install \
-    numpy==1.24.4 \
-    scipy \
-    scikit-learn \
-    filterpy==1.4.5 \
-    matplotlib \
-    pyyaml \
-    pillow \
-    opencv-python-headless \
-    glob2==0.6 \
-    easydict==1.9 \
-    numba==0.57.1 \
-    llvmlite==0.40.1
-
 # Clone Xinshuo_PyToolbox
 RUN git clone https://github.com/xinshuoweng/Xinshuo_PyToolbox /workspace/Xinshuo_PyToolbox
 
-# Install Xinshuo dependencies
-WORKDIR /workspace/Xinshuo_PyToolbox
+# Install AB3DMOT dependencies
+RUN pip install -r /workspace/AB3DMOT/requirements.txt && \
+    pip install -r /workspace/Xinshuo_PyToolbox/requirements.txt
 
-RUN pip install \
-    numpy==1.24.4 \
-    scipy \
-    matplotlib \
-    pillow \
-    opencv-python-headless \
-    pyyaml \
-    easydict
+# install src dependencies
+COPY src/requirements.txt /workspace/src/requirements.txt
+COPY src/ab3dmot/requirements.txt /workspace/src/ab3dmot/requirements.txt
+RUN pip install --no-cache-dir -r /workspace/src/requirements.txt && \
+    pip install --no-cache-dir -r /workspace/src/ab3dmot/requirements.txt
 
-# Execution Script
-WORKDIR /workspace
-
-COPY src /workspace/src
+# copy execution script
 COPY src/scripts/run_ab3dmot.sh /workspace/run_ab3dmot.sh
-
 RUN chmod +x /workspace/run_ab3dmot.sh
 
+# user
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+RUN groupadd --gid "${HOST_GID}" dockeruser && \
+    useradd --uid "${HOST_UID}" --gid "${HOST_GID}" --create-home --shell /bin/bash dockeruser
+RUN chown -R "${HOST_UID}:${HOST_GID}" /workspace
+RUN git config --system --add safe.directory /workspace/AB3DMOT
+RUN git config --system --add safe.directory /workspace/Xinshuo_PyToolbox
+ENV HOME=/home/dockeruser
+
+USER dockeruser
+
+# execute
 ENTRYPOINT ["/workspace/run_ab3dmot.sh"]
