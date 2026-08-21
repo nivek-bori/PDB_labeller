@@ -21,7 +21,10 @@ def safe_makedirs(path, exist_ok: bool = True):
 
 
 # both lidar and images
-def get_filenames_and_paths(dir_path: str, valid_extensions: list[str]) -> tuple[list[str], list[str]]:
+def get_filenames_and_paths(dir_path: str, valid_extensions: str | list[str]) -> tuple[list[str], list[str]]:
+	if isinstance(valid_extensions, str):
+		valid_extensions = [valid_extensions]
+   	
 	filenames = sorted([f for f in os.listdir(dir_path) if os.path.splitext(f)[1].lower() in valid_extensions])
 
 	timestamps = [get_ns_timestamp(f) for f in filenames]
@@ -107,78 +110,79 @@ def find_relative_dirs_with_file_types(root_path: str, valid_extensions: Iterabl
 
 
 def verify_data_dirs(data_dir_paths):
-    for data_dir_path in data_dir_paths:
-        issues = []
+	for i, data_dir_path in enumerate(data_dir_paths):
+		issues = []
 
-        # load metadata
-        metadata = load_metadata(data_dir_path, throw_no_file_error=False, use_true_path=True)
-        if not metadata:
-            issues.append(f"[{data_dir_path}] Metadata is empty or invalid JSON.")
-            continue
+		# load metadata
+		metadata = load_metadata(data_dir_path, throw_no_file_error=False, use_true_path=True)
+		if not metadata:
+			issues.append(f"[{data_dir_path}] Metadata is empty or invalid JSON.")
+			continue
 
-        # verify required keys
-        missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
-        if missing_keys:
-            issues.append(f"[{data_dir_path}] Metadata missing required keys: {missing_keys}")
-            continue
+		# verify required keys
+		missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
+		if missing_keys:
+			issues.append(f"[{data_dir_path}] Metadata missing required keys: {missing_keys}")
+			continue
 
-        # fill in all defaults
-        for key in METADATA_DEFAULTS.keys():
-            metadata[key] = metadata.get(key, METADATA_DEFAULTS[key])
+		# fill in all defaults
+		for key in METADATA_DEFAULTS:
+			metadata[key] = metadata.get(key, METADATA_DEFAULTS[key])
 
-            if metadata[key] is None:  # if key or default is None, proceed to special defaults
-                del metadata[key]
+			if metadata[key] is None:  # if key or default is None, proceed to special defaults
+				del metadata[key]
 
-        # fill in special defaults
-        metadata["lidar_rpaths"] = metadata.get(
-            "lidar_rpaths", find_relative_dirs_with_file_types(data_dir_path, LIDAR_EXTENSIONS, sub_dir_rpath="lidar")
-        )
-        metadata["image_rpaths"] = metadata.get(
-            "image_rpaths", find_relative_dirs_with_file_types(data_dir_path, IMAGE_EXTENSIONS, sub_dir_rpath="images")
-        )
+		# fill in special defaults
+		metadata["lidar_rpaths"] = metadata.get(
+			"lidar_rpaths", find_relative_dirs_with_file_types(data_dir_path, LIDAR_EXTENSIONS, sub_dir_rpath="lidar")
+		)
+		metadata["image_rpaths"] = metadata.get(
+			"image_rpaths", find_relative_dirs_with_file_types(data_dir_path, IMAGE_EXTENSIONS, sub_dir_rpath="images")
+		)
+		metadata["unique_name"] = f'data_dir_{i}'
 
-        if not metadata["lidar_transformations"]:
-            metadata["lidar_transformations"] = [[0, 0, 0]] * len(metadata["lidar_rpaths"])
+		if not metadata["lidar_transformations"]:
+			metadata["lidar_transformations"] = [[0, 0, 0]] * len(metadata["lidar_rpaths"])
 
-        # verify lidar
-        if not metadata["lidar_rpaths"]:
-            issues.append(f"[{data_dir_path}] Metadata 'lidar_rpaths' is empty or missing.")
-        for lidar_rpath in metadata["lidar_rpaths"]:
-            lidar_path = os.path.join(data_dir_path, lidar_rpath)
-            if not os.path.isdir(lidar_path):
-                issues.append(f"[{data_dir_path}] Lidar directory does not exist: {lidar_path}")
-                continue
+		# verify lidar
+		if not metadata["lidar_rpaths"]:
+			issues.append(f"[{data_dir_path}] Metadata 'lidar_rpaths' is empty or missing.")
+		for lidar_rpath in metadata["lidar_rpaths"]:
+			lidar_path = os.path.join(data_dir_path, lidar_rpath)
+			if not os.path.isdir(lidar_path):
+				issues.append(f"[{data_dir_path}] Lidar directory does not exist: {lidar_path}")
+				continue
 
-            lidar_files = get_filenames_and_paths(lidar_path, LIDAR_EXTENSIONS)
-            if not lidar_files:
-                issues.append(f"[{data_dir_path}] No lidar files with extensions {LIDAR_EXTENSIONS} found in {lidar_path}")
+			lidar_files = get_filenames_and_paths(lidar_path, LIDAR_EXTENSIONS)
+			if not lidar_files:
+				issues.append(f"[{data_dir_path}] No lidar files with extensions {LIDAR_EXTENSIONS} found in {lidar_path}")
 
-        # verify image
-        if not metadata["image_rpaths"]:
-            issues.append(f"[{data_dir_path}] Metadata 'image_rpaths' is empty or missing.")
-        for image_rpath in metadata["image_rpaths"]:
-            image_path = os.path.join(data_dir_path, image_rpath)
-            if not os.path.isdir(image_path):
-                issues.append(f"[{data_dir_path}] Image directory does not exist: {image_path}")
-                continue
+		# verify image
+		if not metadata["image_rpaths"]:
+			issues.append(f"[{data_dir_path}] Metadata 'image_rpaths' is empty or missing.")
+		for image_rpath in metadata["image_rpaths"]:
+			image_path = os.path.join(data_dir_path, image_rpath)
+			if not os.path.isdir(image_path):
+				issues.append(f"[{data_dir_path}] Image directory does not exist: {image_path}")
+				continue
 
-            image_files = get_filenames_and_paths(image_path, IMAGE_EXTENSIONS)
-            if not image_files:
-                issues.append(f"[{data_dir_path}] No image files with extensions {IMAGE_EXTENSIONS} found in {image_path}")
+			image_files = get_filenames_and_paths(image_path, IMAGE_EXTENSIONS)
+			if not image_files:
+				issues.append(f"[{data_dir_path}] No image files with extensions {IMAGE_EXTENSIONS} found in {image_path}")
 
-        # verify gps
-        if not os.path.exists(os.path.join(data_dir_path, metadata["gps_rpath"])):
-            issues.append(f"[{data_dir_path}] gps.csv not found at expected path: {metadata['gps_rpath']}")
+		# verify gps
+		if not os.path.exists(os.path.join(data_dir_path, metadata["gps_rpath"])):
+			issues.append(f"[{data_dir_path}] gps.csv not found at expected path: {metadata['gps_rpath']}")
 
-        # verify canbus
-        canbus_rpath = metadata.get("canbus_rpath", METADATA_DEFAULTS["canbus_rpath"])
-        if not os.path.exists(os.path.join(data_dir_path, canbus_rpath)):
-            issues.append(f"[{data_dir_path}] canbus.csv not found at expected path: {canbus_rpath}")
+		# verify canbus
+		canbus_rpath = metadata.get("canbus_rpath", METADATA_DEFAULTS["canbus_rpath"])
+		if not os.path.exists(os.path.join(data_dir_path, canbus_rpath)):
+			issues.append(f"[{data_dir_path}] canbus.csv not found at expected path: {canbus_rpath}")
 
-        # log issues
-        if len(issues) > 0:
-            print(f"Data verification of ${data_dir_path} failed:\n" + "\n".join(issues))
-        else:
-            # write full metadata
-            with open(os.path.join(data_dir_path, "full_metadata.json"), "w") as f:
-                json.dump(metadata, f, indent=4)
+		# log issues
+		if len(issues) > 0:
+			print(f"Data verification of ${data_dir_path} failed:\n" + "\n".join(issues))
+		else:
+			# write full metadata
+			with open(os.path.join(data_dir_path, "full_metadata.json"), "w") as f:
+				json.dump(metadata, f, indent=4)

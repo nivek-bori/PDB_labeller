@@ -1,9 +1,27 @@
-.git
-__pycache__
-*.pyc
-.pytest_cache
-.mypy_cache
-.ruff_cache
-data/raw
-data/processed
-data/intermediate
+# Runtime data and models
+data/
+models/
+results/
+tmp/
+tools/visualize_lidar/
+
+# Repository and Python caches
+.git/
+**/.git/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Local environments and editor files
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+.DS_Store
+
+# Generated build artifacts
+build/
+dist/
+*.egg-info/

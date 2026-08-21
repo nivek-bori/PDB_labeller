@@ -1,6 +1,11 @@
 Detailed Pipeline:
-  Execution Script:
-    ▫ Add final sequencer (separate into 50 frame / 10s @ 0.2HZ)
+  Data Foramt:
+    ▫ store every processed output before unifying in intermediate/{rel_path_i}/{data_type}
+      ▫ lidar
+      ▫ image
+      ▫ heartrate
+      ▫ gps
+    ▫ test everything
   
   3D Trajectory Dataset:
     ▫ Load 3D Tracks and Processed GPS data (python)
@@ -11,8 +16,19 @@ Detailed Pipeline:
       ▫ track.global_xyz = to_latlon(track.xyz) + gps.xyz
         ▫ figure out which of x or y means N/S or E/W from AB3DMOT output @next
         ▫ def to_latlon(xyz)
-    ▫ Store trajectory data in Parquet or CSV file with [timestamp, driver_id, track_id, class, x, y, z, vx,  vy, heading, length, width, height] // xyz in global coordinates (python)
+    ▫ Store trajectory data in Parquet or CSV file with [timestamp, driver_id, track_id, class, x, y, z, vx, vy, heading, length, width, height] // xyz in global coordinates (python)
     ▫ Store matched_gps in csv with [timestamp, x, y, z] // xyz in global coordinates (python)
+
+  Sequencer:
+    ▫ Add final sequencer (separate into 50 frame / 10s @ 0.2HZ)
+
+  Code Quality:
+    ▫ Standardize using "path" / "path" and string paths, not Path paths
+    ▫ Standardize using WORKSPACE_PATH
+
+  Additional Optimizations:
+    ▫ Allow things to run in paralell within docker containers by separating different data_dir pipelines by using the unique name in metadata
+    ▫ Run ultralytics on CUDA instead of CPU
 
 Finished: 
   ✔ Format openpcdet output into KITTI format for input (python) @started(26-07-11 15:56) @done(26-08-15 22:27) @lasted(5w6h31m1s) @project(Detailed Pipeline.AB3DMOT)

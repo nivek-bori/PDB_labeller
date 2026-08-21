@@ -66,6 +66,8 @@ IMAGE_EXTENSIONS = {
     ".heif",
 }
 
+IMAGE_OUTPUT_FORMAT = ".parquet"
+
 LIDAR_EXTENSIONS = [".bin"]
 
 # YOLO
@@ -135,6 +137,7 @@ POINTPILLARS_POINT_CLOUD_RANGE = [
 # Time
 NS_PER_SECOND = 1_000_000_000
 NS_TIMESTAMP_THRESHOLD = 1e14
+GPS_UNIX_EPOCH_OFFSET_SECONDS = 315964800 - 18 # 18 leap seconds
 
 # Docker
 DOCKER_WORKSPACE = "/workspace"
@@ -150,5 +153,6 @@ METADATA_DEFAULTS = {
     "lidar_transformations": None,
     "gps_rpath": "gps.csv",
     "canbus_rpath": "canbus.json",
+    "heartrate_rpath": "heartrate.csv",
     "sampling_hertz": 5,
 }

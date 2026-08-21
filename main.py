@@ -15,11 +15,10 @@ from src.misc.io import delete_data_intermediate_dir, load_metadata, verify_data
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-BUILT_IMAGES = []
 DOCKER_PLATFORM = "linux/amd64" if platform.system() == "Darwin" else None
 
 
-def _parse_arguments() -> tuple[list[str], list[str], bool]:
+def _parse_arguments() -> tuple[list[str], list[str], bool, bool]:
     # set args
     parser = argparse.ArgumentParser(description="Auto-label PDB data")
 
@@ -31,7 +30,7 @@ def _parse_arguments() -> tuple[list[str], list[str], bool]:
     )
     parser.add_argument("--build_only", action="store_true", help="Only build images.")
 
-    arg_flags = {
+    no_execute_flags = {
         "no_gps": "Do not process GPS data.",
         "no_image": "Do not process camera image data.",
         "no_lidar": "Do not process LiDAR data.",
@@ -39,13 +38,30 @@ def _parse_arguments() -> tuple[list[str], list[str], bool]:
         "no_ab3dmot": "Do not execute ab3dmot.",
     }
 
-    for flag, help_msg in arg_flags.items():
+    cleanup_flags = {
+        "delete_gps": "Delete GPS related images.",
+        "delete_image": "Delete camera image related images.",
+        "delete_openpcdet": "Delete OpenPCDet-related images.",
+        "delete_ab3dmot": "Delete AB3DMOT-related images.",
+        "delete_lidar": "Delete all LiDAR-related images (OpenPCDet and AB3DMOT).",
+    }
+
+    rebuild_flags = {
+        "rebuild_deps": "Rebuild dependency images even if they already exist.",
+        "rebuild_gps": "Rebuild GPS dependency image.",
+        "rebuild_image": "Rebuild camera image dependency/image.",
+        "rebuild_openpcdet": "Rebuild OpenPCDet-related images.",
+        "rebuild_ab3dmot": "Rebuild AB3DMOT-related images.",
+        "rebuild_lidar": "Rebuild all LiDAR-related images (OpenPCDet and AB3DMOT).",
+    }
+
+    for flag, help_msg in {**no_execute_flags, **cleanup_flags, **rebuild_flags}.items():
         parser.add_argument(
             f"--{flag}",
             action="store_true",
             help=help_msg,
         )
-   
+
     # parse args
     args = parser.parse_args()
 
@@ -56,9 +72,11 @@ def _parse_arguments() -> tuple[list[str], list[str], bool]:
     elif not paths_to_data:
         parser.error("paths_to_data must be provided either as a command-line argument or through the PATHS_TO_DATA environment variable.")
 
-    flags = [flag for flag in arg_flags if getattr(args, flag)]
+    no_execute_flags = [flag for flag in no_execute_flags if getattr(args, flag)]
+    cleanup_flags = [flag for flag in cleanup_flags if getattr(args, flag)]
+    rebuild_flags = [flag for flag in rebuild_flags if getattr(args, flag)]
 
-    return paths_to_data, flags, only_build
+    return paths_to_data, only_build, no_execute_flags, cleanup_flags, rebuild_flags
 
 
 def _to_container_data_path(host_path: str | Path) -> str:
@@ -76,77 +94,143 @@ def _to_container_data_path(host_path: str | Path) -> str:
 def _get_build_configs() -> dict[str, dict]:
     BUILD_CONFIGS = {
         "gps": {
-            "dockerfile": "docker/gps.Dockerfile",
-            "image_name": "pdb-gps:latest",
+            "deps": {
+                "dockerfile": "docker/gps-deps.Dockerfile",
+                "image_name": "pdb-gps-deps:py310-v1",
+                "buildargs": {},
+            },
+            "runner": {
+                "dockerfile": "docker/gps.Dockerfile",
+                "image_name": "pdb-gps:latest",
+                "deps_arg_name": "GPS_DEPS_IMAGE",
+            },
         },
         "image": {
-            "dockerfile": "docker/image.Dockerfile",
-            "image_name": "pdb-image:latest",
+            "deps": {
+                "dockerfile": "docker/image-deps.Dockerfile",
+                "image_name": "pdb-image-deps:py310-v1",
+                "buildargs": {},
+            },
+            "runner": {
+                "dockerfile": "docker/image.Dockerfile",
+                "image_name": "pdb-image:latest",
+                "deps_arg_name": "IMAGE_DEPS_IMAGE",
+            },
         },
         "openpcdet": {
-            "dockerfile": "docker/openpcdet.Dockerfile",
-            "image_name": "pdb-openpcdet:latest",
+            "deps": {
+                "dockerfile": "docker/openpcdet-deps.Dockerfile",
+                "image_name": "pdb-openpcdet-deps:torch2.7.1-cu128-sm120-pcdet-233f849",
+                "buildargs": {
+                    "OPENPCDET_COMMIT": "233f849",
+                },
+            },
+            "runner": {
+                "dockerfile": "docker/openpcdet.Dockerfile",
+                "image_name": "pdb-openpcdet:latest",
+                "deps_arg_name": "OPENPCDET_DEPS_IMAGE",
+            },
         },
         "ab3dmot": {
-            "dockerfile": "docker/ab3dmot.Dockerfile",
-            "image_name": "pdb-ab3dmot:latest",
+            "deps": {
+                "dockerfile": "docker/ab3dmot-deps.Dockerfile",
+                "image_name": "pdb-ab3dmot-deps:py310-v1",
+                "buildargs": {},
+            },
+            "runner": {
+                "dockerfile": "docker/ab3dmot.Dockerfile",
+                "image_name": "pdb-ab3dmot:latest",
+                "deps_arg_name": "AB3DMOT_DEPS_IMAGE",
+            },
         },
     }
 
     return BUILD_CONFIGS
 
 
-def _build_image(build_config):
+def _image_exists(image_name: str) -> bool:
     client = docker.from_env()
 
-    build_kwargs = {
-        "path": str(PROJECT_ROOT),
-        "dockerfile": build_config["dockerfile"],
-        "tag": build_config["image_name"],
-        "rm": True,
-        "forcerm": True,
-        "decode": True,
-        "buildargs": {
-            "HOST_UID": str(os.getuid()),
-            "HOST_GID": str(os.getgid()),
-        },
-    }
+    try:
+        client.images.get(image_name)
+        return True
+    except docker.errors.ImageNotFound:
+        return False
+
+
+def _build_with_buildx(
+    dockerfile: str,
+    image_name: str,
+    buildargs: dict[str, str] | None = None,
+) -> None:
+    command = [
+        "docker",
+        "buildx",
+        "build",
+        "--load",
+        "-f",
+        dockerfile,
+        "-t",
+        image_name,
+    ]
 
     if DOCKER_PLATFORM:
-        build_kwargs["platform"] = DOCKER_PLATFORM
+        command.extend(["--platform", DOCKER_PLATFORM])
 
-    build_logs = client.api.build(**build_kwargs)
+    for key, value in (buildargs or {}).items():
+        command.extend(["--build-arg", f"{key}={value}"])
 
-    image_id = None
+    command.append(str(PROJECT_ROOT))
 
-    for chunk in build_logs:
-        if "stream" in chunk:
-            print(chunk["stream"], end="", flush=True)
+    subprocess.run(command, check=True, cwd=PROJECT_ROOT)
 
-        if "status" in chunk:
-            progress = chunk.get("progress", "")
-            print(
-                f"{chunk['status']} {progress}",
-                flush=True,
-            )
 
-        if "aux" in chunk:
-            image_id = chunk["aux"].get("ID", image_id)
+def _build_dependency_image(build_config: dict) -> None:
+    deps_config = build_config["deps"]
 
-        if "error" in chunk:
-            raise RuntimeError(chunk["error"])
+    _build_with_buildx(
+        dockerfile=deps_config["dockerfile"],
+        image_name=deps_config["image_name"],
+        buildargs=deps_config.get("buildargs"),
+    )
 
-        if "errorDetail" in chunk:
-            message = chunk["errorDetail"].get(
-                "message",
-                str(chunk["errorDetail"]),
-            )
-            raise RuntimeError(message)
 
-    try:
-        return client.images.get(build_config["image_name"])
-    except docker.errors.ImageNotFound as exc:
-        raise RuntimeError(f"Build completed but image {build_config['image_name']} was not found") from exc
+def _build_runner_image(build_config: dict) -> None:
+    deps_config = build_config["deps"]
+    runner_config = build_config["runner"]
+
+    buildargs = {
+        "HOST_UID": str(os.getuid()),
+        "HOST_GID": str(os.getgid()),
+        runner_config["deps_arg_name"]: deps_config["image_name"],
+    }
+
+    _build_with_buildx(
+        dockerfile=runner_config["dockerfile"],
+        image_name=runner_config["image_name"],
+        buildargs=buildargs,
+    )
+
+
+def _ensure_service_image(
+    name: str,
+    build_config: dict,
+    rebuild_flags: list,
+    built_runners: set[str],
+) -> None:
+    deps_image = build_config["deps"]["image_name"]
+
+    rebuild_requested = 'rebuild_deps' in rebuild_flags or f'rebuild_{name}' in rebuild_flags
+    if rebuild_requested or not _image_exists(deps_image):
+        print(f">>> building dependency image: {name}", flush=True)
+        _build_dependency_image(build_config)
+    else:
+        print(f">>> dependency image exists: {deps_image}", flush=True)
+
+    if name not in built_runners:
+        print(f">>> building runner image: {name}", flush=True)
+        _build_runner_image(build_config)
+        built_runners.add(name)
 
 
 def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> list[dict]:
@@ -180,13 +264,20 @@ def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> lis
     if "no_lidar" not in no_execute_flags:
         for i in range(len(metadata["lidar_rpaths"])):
             if "no_openpcdet" not in no_execute_flags:
-                execute_configs.append({"name": "openpcdet", "gpu": True, "parameters": [container_data_dir_path, str(i)]})
+                execute_configs.append(
+                    {
+                        "name": "openpcdet",
+                        "gpu": True,
+                        "parameters": [container_data_dir_path, str(i)],
+                        "volumes": {os.path.join(PROJECT_ROOT, "models"): {"bind": "/workspace/models", "mode": "ro"}},
+                    }
+                )
 
             if "no_ab3dmot" not in no_execute_flags:
                 execute_configs.append(
                     {
                         "name": "ab3dmot",
-                        "parameters": [container_data_dir_path, str(i)],
+                        "parameters": [str(i)],
                         "volumes": {
                             # TOOD: remove (currently only for development purposes)
                             os.path.join(PROJECT_ROOT.parent, "AB3DMOT"): {
@@ -202,7 +293,7 @@ def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> lis
 
 def _create_run_container_kwargs(execute_config, build_config):
     container_kwargs = {
-        "image": build_config["image_name"],
+        "image": build_config["runner"]["image_name"],
         "volumes": {
             **(execute_config.get("volumes", {})),
             os.path.join(PROJECT_ROOT, "data"): {
@@ -264,20 +355,24 @@ def _run_container(name: str, execute_config, build_config) -> None:
             print(f"[{name}] Warning: failed to remove container: {exc}", flush=True)
 
 
-def _run_docker_cleanup(apply=True) -> None:
+def _run_docker_cleanup(cleanup_flags: list[str], apply=True) -> None:
     cleanup_script = PROJECT_ROOT / "tools" / "docker_cleanup.sh"
     if apply:
-        subprocess.run(["bash", str(cleanup_script), "--apply"], check=False)
+        subprocess.run(["bash", str(cleanup_script), "--apply", *cleanup_flags], check=False)
     else:
-        subprocess.run(["bash", str(cleanup_script)], check=False)
+        subprocess.run(["bash", str(cleanup_script), *cleanup_flags], check=False)
 
 
-def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int = -1):
+def _run_substeps(
+    build_configs: dict,
+    execute_configs: list[dict],
+    built_runners: set[str],
+    rebuild_flags: list,
+    dir_i: int = -1,
+):
     delete_data_intermediate_dir()
 
-    BUILT_IMAGES = []
-
-    # build
+    # build & run
     n = len(execute_configs)
     for i in range(n):
         execute_config = execute_configs[i]
@@ -286,13 +381,12 @@ def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int =
 
         log_header = ">>> main.py " + (f"dir:{dir_i} " if dir_i >= 0 else "") + f"step:{i + 1}/{n}"
 
-        # build
-        if name in BUILT_IMAGES:
-            print(f"{log_header} % image already built: {name}", flush=True)
-        else:
-            print(f"{log_header} % building {name}", flush=True)
-            _build_image(build_config)
-            BUILT_IMAGES.append(name)
+        _ensure_service_image(
+            name=name,
+            build_config=build_config,
+            rebuild_flags=rebuild_flags,
+            built_runners=built_runners,
+        )
 
         # run
         print(f"{log_header} % running {name}", flush=True)
@@ -301,32 +395,59 @@ def _run_substeps(build_configs: dict, execute_configs: list[dict], dir_i: int =
     # delete_data_intermediate_dir() # TODO: Add back inn
 
 
-def main():
-    try:
-        data_dir_paths, no_execute_flags, only_build = _parse_arguments()
-        if DOCKER_PLATFORM:
-            print(f">>> macOS detected: using Docker platform {DOCKER_PLATFORM}", flush=True)
+def _build_requested_images(
+    build_configs: dict,
+    no_execute_flags: list[str],
+    rebuild_flags: list,
+) -> None:
+    built_runners: set[str] = set()
 
+    for name, build_config in build_configs.items():
+        no_gps = name == "gps" and "no_gps" in no_execute_flags
+        no_image = name == "image" and "no_image" in no_execute_flags
+        no_lidar = name in ["openpcdet", "ab3dmot"] and "no_lidar" in no_execute_flags
+
+        if not (no_gps or no_image or no_lidar):
+            _ensure_service_image(
+                name=name,
+                build_config=build_config,
+                rebuild_flags=rebuild_flags,
+                built_runners=built_runners,
+            )
+
+
+def main():
+    data_dir_paths, only_build, no_execute_flags, cleanup_flags, rebuild_flags = _parse_arguments()
+
+    _run_docker_cleanup(cleanup_flags, apply=False)
+
+    try:
         verify_data_dirs(data_dir_paths)
 
         build_configs = _get_build_configs()
 
         if only_build:
-            for name in build_configs:
-                no_gps = name == "gps" and "no_gps" in no_execute_flags
-                no_image = name == "image" and "no_image" in no_execute_flags
-                no_lidar = name in ["openpcdet", "ab3dmot"] and "no_lidar" in no_execute_flags
-
-                if not (no_gps or no_image or no_lidar):
-                    _build_image(build_configs[name])
+            _build_requested_images(
+                build_configs=build_configs,
+                no_execute_flags=no_execute_flags,
+                rebuild_flags=rebuild_flags,
+            )
         else:
+            built_runners: set[str] = set()
+
             # execute and build images on demand
             for dir_i, data_dir_path in enumerate(data_dir_paths):
                 execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
 
-                _run_substeps(build_configs, execute_configs, dir_i)
+                _run_substeps(
+                    build_configs=build_configs,
+                    execute_configs=execute_configs,
+                    built_runners=built_runners,
+                    rebuild_flags=rebuild_flags,
+                    dir_i=dir_i,
+                )
     finally:
-        _run_docker_cleanup(apply=False)
+        _run_docker_cleanup(cleanup_flags, apply=False)
 
 
 if __name__ == "__main__":

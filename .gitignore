@@ -13,3 +13,5 @@ models/
 tmp/
 
 *.pyc
+
+tools/visualize_lidar_output/*

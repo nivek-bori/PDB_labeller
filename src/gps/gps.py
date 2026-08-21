@@ -1,27 +1,43 @@
-import numpy as np
-from filterpy.kalman import KalmanFilter
 import os
+import csv
+import argparse
+from filterpy.kalman import KalmanFilter
+import numpy as np
 from pandas import DataFrame
 from src.misc.constants import (
-	EARTH_RADIUS_M,
-	GPS_CSV_SKIP_ROWS,
-	OXTS_DEFAULT_VALUES,
-	RAW_GPS_COL_ACCELERATION_FORWARD,
-	RAW_GPS_COL_ACCELERATION_LATERAL,
-	RAW_GPS_COL_ALTITUDE,
-	RAW_GPS_COL_LATITUDE,
-	RAW_GPS_COL_LONGITUDE,
-	RAW_GPS_COL_TIME,
-	RAW_GPS_COL_VELOCITY_FORWARD,
-	RAW_GPS_COL_VELOCITY_LATERAL,
-	GPS_STD,
-	NS_PER_SECOND,
+    EARTH_RADIUS_M,
+    GPS_CSV_SKIP_ROWS,
+    RAW_GPS_COL_ACCELERATION_FORWARD,
+    RAW_GPS_COL_ACCELERATION_LATERAL,
+    RAW_GPS_COL_ALTITUDE,
+    RAW_GPS_COL_LATITUDE,
+    RAW_GPS_COL_LONGITUDE,
+    RAW_GPS_COL_TIME,
+    RAW_GPS_COL_VELOCITY_FORWARD,
+    RAW_GPS_COL_VELOCITY_LATERAL,
+    GPS_STD,
+    NS_PER_SECOND,
+    GPS_UNIX_EPOCH_OFFSET_SECONDS,
 )
 from src.misc.io import load_csv, load_metadata, safe_makedirs
-import csv
+
+
+def _parse_arguments():
+	# parse args
+	parser = argparse.ArgumentParser(description="Smooth position using Kalman Filter. Reformat into tracker and oxt formats.")
+	parser.add_argument("data_dir_path", type=str, help="Path to the directory containing all data.")
+	args = parser.parse_args()
+
+	# extract parameters
+	data_dir_path = os.environ.get("DATA_DIR_PATH", args.data_dir_path)
+
+	return data_dir_path
 
 
 def _format_gpd_dataframe(gps_dataframe: DataFrame):
+	def gps_2_unix_timestamp(timestamps: list):
+		return [ts + GPS_UNIX_EPOCH_OFFSET_SECONDS * 1_000_000_000 for ts in timestamps]
+	
 	def format_xyz(lats: list[float], lons: list[float], alt: list[float]):
 		lats, lons, alt = np.array(lats), np.array(lons), np.array(alt)
 
@@ -209,42 +225,10 @@ def _write_txyz_csv(gps_dataset: dict[str, list]):
 			writer.writerow(row)
 
 
-def _write_oxts_txt(gps_dataset: dict[str, any]):
-	write_path = "data/intermediate/PDB/tracking/test/oxts/0000.txt"
-	safe_makedirs(os.path.dirname(write_path))
-
-	n = min(len(v) for v in gps_dataset.values() if v is not None)
-	keys = list(OXTS_DEFAULT_VALUES.keys())
-
-	if "z" in gps_dataset and "alt" not in gps_dataset:
-		gps_dataset["alt"] = gps_dataset["z"]
-
-	with open(write_path, "w") as f:
-		for row_i in range(n):
-			row = []
-
-			for key in keys:
-				gps_row = gps_dataset.get(key, None)
-
-				value = OXTS_DEFAULT_VALUES.get(key, None)
-				if gps_row is not None:
-					value = gps_row[row_i]
-
-				if value is None:
-					raise ValueError(
-						f"Missing required OXTS value '{key}' at row {row_i}. "
-						f"Either provide it in gps_dataset or set a default."
-					)
-
-				row.append(value)
-
-			row_str = " ".join(str(elem) for elem in row)
-			f.write(row_str + "\n")
-
-
-def main(data_dir_path: str):
+def main():
+	data_dir_path = _parse_arguments()
 	metadata = load_metadata(data_dir_path)
-	
+
 	# load & format data
 	raw_gps_dataframe = load_csv(os.path.join(data_dir_path, metadata["gps_rpath"]), skip_rows=GPS_CSV_SKIP_ROWS)
 	gps_dataset = _format_gpd_dataframe(raw_gps_dataframe)
@@ -253,28 +237,7 @@ def main(data_dir_path: str):
 	gps_dataset = _apply_kalman_filter(gps_dataset)
 
 	_write_txyz_csv(gps_dataset)
-	_write_oxts_txt(gps_dataset)
 
 
 if __name__ == "__main__":
-	import argparse
-
-	# parse args
-	parser = argparse.ArgumentParser(
-		description="Smooth position using Kalman Filter. Reformat into tracker and oxt formats."
-	)
-	parser.add_argument(
-		"data_dir_path",
-		type=str,
-		help="Path to the directory containing all data.",
-	)
-	args = parser.parse_args()
-
-	# extract parameters
-	DATA_DIR_PATH = (
-		os.environ["DATA_DIR_PATH"]
-		if "DATA_DIR_PATH" in os.environ
-		else args.data_dir_path
-	)
-
-	main(DATA_DIR_PATH)
+	main()

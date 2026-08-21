@@ -19,7 +19,7 @@ from src.misc.io import (
 )
 
 
-def _parse_arguements():
+def _parse_arguments():
     # parse args
     parser = argparse.ArgumentParser(description="Save YOLO detection and tracking results on camera images.")
     parser.add_argument(
@@ -103,7 +103,7 @@ def _write_lidar_dataset(path, timestamps: list[int], lidar_dataset: list[np.nda
 
 
 def main():
-    data_dir_path, lidar_rpath_index = _parse_arguements()
+    data_dir_path, lidar_rpath_index = _parse_arguments()
     metadata = load_metadata(data_dir_path)
     lidar_dir_rpath = metadata["lidar_rpaths"][lidar_rpath_index]
     lidar_transformation = metadata["lidar_transformations"][lidar_rpath_index]

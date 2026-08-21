@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # ============================================================
 
 bin_dir = "/home/tsr-sim/kevin/PDB_labeller/data/raw/reduced/lidar"
-tmp_dir = "tools/visualize_lidar"
+tmp_dir = "tools/visualize_lidar_output"
 file_extension = "png"
 
 # Perspective-specific output directories

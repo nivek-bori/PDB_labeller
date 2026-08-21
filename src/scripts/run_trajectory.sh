@@ -1,3 +1,4 @@
-echo "Script not implemented yet"
+#!/usr/bin/env bash
+set -euo pipefail
 
-exit 1
+exec python -m src.gps.gps "$DATA_DIR_PATH"
