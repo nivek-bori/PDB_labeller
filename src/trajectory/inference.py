@@ -1,3 +1,5 @@
+# TODO: essentially rewrite this entire file
+
 import os
 import csv
 import numpy as np
@@ -5,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 from datetime import datetime
-from src.misc.io import _load_metadata, get_filenames_and_paths
+from src.misc.io import load_metadata, get_filenames_and_paths
 from src.trajectory.unify_time import unify_timestamps
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -102,49 +104,53 @@ def _load_image_parquet(image_path: str) -> tuple[list[float], dict[float, list[
 
 
 def _load_ab3dmot_data() -> tuple[list[float], dict]:
-	ab3dmot_dir_path = PROJECT_ROOT / "data/intermediate/ab3dmot"
+    ab3dmot_dir_path = PROJECT_ROOT / "data/intermediate/ab3dmot"
 
-	# frame -> timestamp
-	with open(ab3dmot_dir_path / "frame_map.json", "r") as f:
-		frame_map = json.load(f)
+    # frame -> timestamp
+    with open(ab3dmot_dir_path / "frame_map.json", "r") as f:
+        frame_map = json.load(f)
 
-	track_time: list[float] = []
-	track_data: dict[float, dict] = {}
+    track_time: list[float] = []
+    track_data: dict[float, dict] = {}
 
-	frames, frame_paths = get_filenames_and_paths(ab3dmot_dir_path / "trk_withid_0")
+    frames, frame_paths = get_filenames_and_paths(
+        ab3dmot_dir_path / "trk_withid_0",
+        ["txt"],
+        filename_kind="frame",
+    )
 
-	for frame, frame_path in zip(frames, frame_paths):
-		timestamp = int(frame_map[str(frame)])
+    for frame, frame_path in zip(frames, frame_paths):
+        timestamp = int(frame_map[str(frame)])
 
-		track_time.append(timestamp)
-		track_data[timestamp] = {}
+        track_time.append(timestamp)
+        track_data[timestamp] = {}
 
-		with open(frame_path, "r") as f:
-			for line in f:
-				values = line.split()
-				if not values:
-					continue
+        with open(frame_path, "r") as f:
+            for line in f:
+                values = line.split()
+                if not values:
+                    continue
 
-				# KITTI format:
-				# type trunc occ alpha bbox(4) h w l x y z ry score track_id
-				track_data[timestamp] = {
-					'track_id': int(values[16]),
-		"class_id": values[0],
-		"dimensions": {
-			"h": float(values[8]),
-			"w": float(values[9]),
-			"l": float(values[10]),
-		},
-		"position": {
-			"x": float(values[11]),
-			"y": float(values[12]),
-			"z": float(values[13]),
-		},
-		"theta": float(values[14]),
-		"score": float(values[15]),
-	}
+                # KITTI format:
+                # type trunc occ alpha bbox(4) h w l x y z ry score track_id
+                track_data[timestamp] = {
+                    "track_id": int(values[16]),
+                    "class_id": values[0],
+                    "dimensions": {
+                        "h": float(values[8]),
+                        "w": float(values[9]),
+                        "l": float(values[10]),
+                    },
+                    "position": {
+                        "x": float(values[11]),
+                        "y": float(values[12]),
+                        "z": float(values[13]),
+                    },
+                    "theta": float(values[14]),
+                    "score": float(values[15]),
+                }
 
-	return sorted(track_time), track_data
+    return sorted(track_time), track_data
 
 
 def _load_gps_data() -> tuple[list[float], dict[float, dict]]:
@@ -232,17 +238,17 @@ def _optimize_time(hertz=5, **time):
 
 
 def main():
-	data_dir_path = _parse_arguments()
-	metadata = _load_metadata(data_dir_path)
+    data_dir_path = _parse_arguments()
+    metadata = load_metadata(data_dir_path)
 
-	image_time, image_data = _load_image_data()
-	track_time, track_data = _load_ab3dmot_data()
-	src_gps_time, src_gps_data = _load_gps_data()
-	heartrate_time, heartrate_data = _load_heartrate_data(metadata["heartrate.csv"])
+    image_time, image_data = _load_image_data()
+    track_time, track_data = _load_ab3dmot_data()
+    src_gps_time, src_gps_data = _load_gps_data()
+    heartrate_time, heartrate_data = _load_heartrate_data(metadata["heartrate.csv"])
 
-	gps_time, gps_data = _linear_interpolation(src_gps_time, src_gps_data, track_time)
+    gps_time, gps_data = _linear_interpolation(src_gps_time, src_gps_data, track_time)
 
-	unified_time = unify_timestamps(track_time, gps_time, heartrate_time, hertz=metadata["sampling_hertz"])
+    unified_time = unify_timestamps(track_time, gps_time, heartrate_time, hertz=metadata["sampling_hertz"])
 
 	# TODO:
 	# figure out what storage format i want

@@ -2,32 +2,49 @@ import os
 import json
 import argparse
 from pathlib import Path
-from src.misc.io import get_filenames_and_paths, safe_makedirs
+from src.misc.io import get_filenames_and_paths, load_metadata, safe_makedirs
+
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
+AB3DMOT_PATH = WORKSPACE_ROOT / "data/intermediate/ab3dmot"
 
 
 def _parse_arguments():
-    parser = argparse.ArgumentParser(description="Format AB3DMOT output.")
-
-    parser.add_argument("lidar_rpath_index", type=int, help="Index of lidar relative path in metadata.")
+    parser = argparse.ArgumentParser(description="Run AB3DMOT inferenceon detections.")
+    parser.add_argument(
+        "data_dir_path",
+        type=str,
+        help="Path to the directory containing all data.",
+    )
+    parser.add_argument(
+        "lidar_rpath_index",
+        type=int,
+        help="Index of lidar relative path in metadata.",
+    )
     args = parser.parse_args()
 
-    lidar_rpath_index = int(os.environ.get("lidar_rpath_index", args.lidar_rpath_index))
+    data_dir_path = os.environ.get(
+        "DATA_DIR_PATH",
+        args.data_dir_path,
+    )
+    lidar_rpath_index = int(
+        os.environ.get(
+            "LIDAR_RPATH_INDEX",
+            args.lidar_rpath_index,
+        )
+    )
 
-    return lidar_rpath_index
+    return data_dir_path, lidar_rpath_index
 
 
-def _load_lidar_track_data() -> list[list[str | int | float]]:
-    ab3dmot_dir_path = WORKSPACE_ROOT / "data/intermediate/ab3dmot"
-
+def _load_lidar_track_data(frame_map_path: str, track_results_dir: str) -> list[list[str | int | float]]:
     # frame -> timestamp
-    with open(ab3dmot_dir_path / "frame_map.json", "r") as f:
+    with open(frame_map_path, "r") as f:
         frame_map = json.load(f)
 
     data = []
 
-    frames, frame_paths = get_filenames_and_paths(ab3dmot_dir_path / "detection_results/pointpillars_test_H1/trk_withid_0", ["txt"])
+    frames, frame_paths = get_filenames_and_paths(track_results_dir, ["txt"], filename_kind="frame")
 
     for frame, frame_path in zip(frames, frame_paths):
         timestamp = int(frame_map[str(frame)])
@@ -63,13 +80,26 @@ def _write_txt_file(write_path: str, data: list):
         f.writelines(" ".join(str(x) for x in row) + "\n" for row in data)
 
 
+def _delete_temporary_data():
+    import shutil
+
+    ab3dmot_results_dir = WORKSPACE_ROOT / "data/intermediate/tmp_ab3dmot/detection_results"
+    if os.path.exists(ab3dmot_results_dir):
+        shutil.rmtree(ab3dmot_results_dir)
+
+
 def main():
-    lidar_rpath_index = _parse_arguments()
+    data_dir_path, lidar_rpath_index = _parse_arguments()
+    metadata = load_metadata(data_dir_path)
 
-    lidar_track_data = _load_lidar_track_data()
+    frame_map_path = WORKSPACE_ROOT / "data/intermediate" / metadata["unique_name"] / f"lidar/detections_{lidar_rpath_index}/frame_map.json"
+    track_results_dir = WORKSPACE_ROOT / "data/intermediate/tmp_ab3dmot/detection_results/pointpillars_test_H1/trk_withid_0/0000"
+    lidar_track_data = _load_lidar_track_data(frame_map_path, track_results_dir)
 
-    write_path = WORKSPACE_ROOT / f"data/intermediate/lidar/track_{lidar_rpath_index}.txt"
+    write_path = WORKSPACE_ROOT / "data/intermediate" / metadata["unique_name"] / f"lidar/track_{lidar_rpath_index}.txt"
     _write_txt_file(write_path, lidar_track_data)
+
+    _delete_temporary_data()
 
 
 if __name__ == "__main__":

@@ -13,4 +13,4 @@ else
     exit 1
 fi
 
-exec python -m src.gps.gps "$DATA_DIR_PATH"
+exec python -m src.gps.inference "$DATA_DIR_PATH"

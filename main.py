@@ -277,7 +277,7 @@ def _get_execute_configs(data_dir_path: str, no_execute_flags: list[str]) -> lis
                 execute_configs.append(
                     {
                         "name": "ab3dmot",
-                        "parameters": [str(i)],
+                        "parameters": [container_data_dir_path, str(i)],
                         "volumes": {
                             # TOOD: remove (currently only for development purposes)
                             os.path.join(PROJECT_ROOT.parent, "AB3DMOT"): {
@@ -370,8 +370,6 @@ def _run_substeps(
     rebuild_flags: list,
     dir_i: int = -1,
 ):
-    delete_data_intermediate_dir()
-
     # build & run
     n = len(execute_configs)
     for i in range(n):
@@ -391,8 +389,6 @@ def _run_substeps(
         # run
         print(f"{log_header} % running {name}", flush=True)
         _run_container(name, execute_config, build_config)
-
-    # delete_data_intermediate_dir() # TODO: Add back inn
 
 
 def _build_requested_images(
@@ -419,10 +415,8 @@ def _build_requested_images(
 def main():
     data_dir_paths, only_build, no_execute_flags, cleanup_flags, rebuild_flags = _parse_arguments()
 
-    _run_docker_cleanup(cleanup_flags, apply=False)
-
     try:
-        verify_data_dirs(data_dir_paths)
+        _run_docker_cleanup(cleanup_flags, apply=False)
 
         build_configs = _get_build_configs()
 
@@ -432,22 +426,28 @@ def main():
                 no_execute_flags=no_execute_flags,
                 rebuild_flags=rebuild_flags,
             )
-        else:
-            built_runners: set[str] = set()
+            return
+        
+        verify_data_dirs(data_dir_paths)
 
-            # execute and build images on demand
-            for dir_i, data_dir_path in enumerate(data_dir_paths):
-                execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
+        delete_data_intermediate_dir()
 
-                _run_substeps(
-                    build_configs=build_configs,
-                    execute_configs=execute_configs,
-                    built_runners=built_runners,
-                    rebuild_flags=rebuild_flags,
-                    dir_i=dir_i,
-                )
+        built_runners: set[str] = set()
+
+        # execute and build images on demand
+        for dir_i, data_dir_path in enumerate(data_dir_paths):
+            execute_configs = _get_execute_configs(data_dir_path, no_execute_flags)
+
+            _run_substeps(
+                build_configs=build_configs,
+                execute_configs=execute_configs,
+                built_runners=built_runners,
+                rebuild_flags=rebuild_flags,
+                dir_i=dir_i,
+            )
     finally:
         _run_docker_cleanup(cleanup_flags, apply=False)
+        # delete_data_intermediate_dir() TODO: add back in
 
 
 if __name__ == "__main__":

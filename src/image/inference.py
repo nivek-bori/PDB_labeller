@@ -20,7 +20,7 @@ from src.misc.io import (
 )
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _parse_arguments():
@@ -53,11 +53,11 @@ def _parse_arguments():
 
 def _load_image_paths(data_dir_path: str, img_rpath_index: int):
     metadata = load_metadata(data_dir_path)
-    
+
     img_dir_rpath = metadata["image_rpaths"][img_rpath_index]
     img_dir_path = Path(data_dir_path) / img_dir_rpath
 
-    timestamps, img_paths = get_filenames_and_paths(img_dir_path, IMAGE_EXTENSIONS)
+    timestamps, img_paths = get_filenames_and_paths(img_dir_path, IMAGE_EXTENSIONS, filename_kind="timestamp")
 
     if not img_paths:
         raise FileNotFoundError(f"No image files found in {img_dir_path}")
@@ -177,23 +177,17 @@ def _write_parquet(path: Path, detections: list[dict]):
     pq.write_table(table, path)
 
 
-def _write_detections(output_dir: str, detections: list[dict]):
+def _write_detections(write_path: str, detections: list[dict]):
     if IMAGE_OUTPUT_FORMAT in ("parquet", ".parquet", "both"):
-        _write_parquet(
-            output_dir / "image.parquet",
-            detections,
-        )
+        _write_parquet(f"{write_path}.parquet", detections)
 
     if IMAGE_OUTPUT_FORMAT in ("csv", ".csv", "both"):
-        _write_csv(
-            output_dir / "image.csv",
-            detections,
-        )
+        _write_csv(f"{write_path}.csv", detections)
 
 
 def main():
     data_dir_path, img_rpath_index = _parse_arguments()
-    
+
     metadata, img_dir_rpath, timestamps, img_paths = _load_image_paths(data_dir_path, img_rpath_index)
 
     model = _load_yolo_model(YOLO_MODEL_PATH)
@@ -204,8 +198,8 @@ def main():
 
     detections = _format_detections(img_dir_rpath, timestamp_results, metadata["driver_id"])
 
-    output_dir = WORKSPACE_ROOT / f"data/intermediate/images/track_{img_rpath_index}"
-    _write_detections(output_dir, detections)
+    write_path = WORKSPACE_ROOT / "data/intermediate" / metadata["unique_name"] / f"images/track_{img_rpath_index}"
+    _write_detections(write_path, detections)
 
 
 if __name__ == "__main__":

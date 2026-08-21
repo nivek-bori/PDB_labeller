@@ -14,15 +14,17 @@ PDB_TO_KITTI = {
     "Cyclist": "Cyclist",
 }
 
+# The AB3DMOT detection_results dataset uses the same class IDs as
+# OpenPCDet: Car=1, Pedestrian=2, Cyclist=3.
 OPENPCDET_TO_AB3DMOT = {
-    1: 2,
-    2: 1,
+    1: 1,
+    2: 2,
     3: 3,
 }
 
 AB3DMOT_ID_TO_NAME = {
-    1: "Pedestrian",
-    2: "Car",
+    1: "Car",
+    2: "Pedestrian",
     3: "Cyclist",
 }
 
@@ -148,6 +150,7 @@ DOCKER_MODELS_BIND = f"{DOCKER_WORKSPACE}/models"
 # Data
 METADATA_REQUIRED_KEYS = ["driver_id"]
 METADATA_DEFAULTS = {
+    "unique_name": None,
     "image_rpaths": None,
     "lidar_rpaths": None,
     "lidar_transformations": None,

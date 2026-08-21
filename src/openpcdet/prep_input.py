@@ -1,5 +1,6 @@
 import os
 import argparse
+from pathlib import Path
 import numpy as np
 from src.misc.constants import (
     LIDAR_EXTENSIONS,
@@ -17,6 +18,9 @@ from src.misc.io import (
     safe_makedirs,
     load_metadata
 )
+
+
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _parse_arguments():
@@ -79,27 +83,12 @@ def _process_lidar_dataset(lidar_dataset: list, lidar_transformation: list) -> l
     return processed
 
 
-def _get_data_range(lidar_dataset: list) -> list:
-    all_x, all_y, all_z = [], [], []
-
-    for lidar_data in lidar_dataset:
-        all_x.append(lidar_data[:, 0])
-        all_y.append(lidar_data[:, 1])
-        all_z.append(lidar_data[:, 2])
-
-    xmin, xmax = np.percentile(np.concatenate(all_x), LIDAR_RANGE_PERCENTILES)
-    ymin, ymax = np.percentile(np.concatenate(all_y), LIDAR_RANGE_PERCENTILES)
-    zmin, zmax = np.percentile(np.concatenate(all_z), LIDAR_RANGE_PERCENTILES)
-
-    return [float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax)]
-
-
-def _write_lidar_dataset(path, timestamps: list[int], lidar_dataset: list[np.ndarray]):
-    path = os.path.join(path, "points")
-    safe_makedirs(path, exist_ok=True)
+def _write_lidar_dataset(dir_path, timestamps: list[int], lidar_dataset: list[np.ndarray]):
+    dir_path = os.path.join(dir_path, "points")
+    safe_makedirs(dir_path, exist_ok=True)
 
     for timestamp, lidar_points in zip(timestamps, lidar_dataset):
-        np.save(os.path.join(path, f"{timestamp}.npy"), lidar_points)
+        np.save(os.path.join(dir_path, f"{timestamp}.npy"), lidar_points)
 
 
 def main():
@@ -110,23 +99,21 @@ def main():
     
     # lidar paths
     lidar_dir_path = os.path.join(data_dir_path, lidar_dir_rpath)
-    timestamps, lidar_paths = get_filenames_and_paths(lidar_dir_path, LIDAR_EXTENSIONS)
+    timestamps, lidar_paths = get_filenames_and_paths(lidar_dir_path, LIDAR_EXTENSIONS, filename_kind="timestamp")
 
     # load & clean data
     lidar_dataset = _load_lidar_from_bin(lidar_paths)
     lidar_dataset = _process_lidar_dataset(lidar_dataset, lidar_transformation)
-    data_range = _get_data_range(lidar_dataset)
-    
 
     # paths
-    write_path = "/workspace/data/intermediate/openpcdet"
+    write_dir_path = WORKSPACE_ROOT / "data/intermediate" / metadata["unique_name"] / f"lidar/detections_{lidar_rpath_index}"
 
     # write to file
-    _write_lidar_dataset(write_path, timestamps, lidar_dataset)
+    _write_lidar_dataset(write_dir_path, timestamps, lidar_dataset)
     write_config(
-        write_path,
+        write_dir_path,
         create_dataset_config(lidar_dir_rpath, POINTPILLARS_POINT_CLOUD_RANGE),
-        create_pointpillars_config(write_path, POINTPILLARS_POINT_CLOUD_RANGE),
+        create_pointpillars_config(write_dir_path, POINTPILLARS_POINT_CLOUD_RANGE),
     )
 
 

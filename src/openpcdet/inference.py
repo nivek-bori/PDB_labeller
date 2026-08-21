@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,11 @@ from pcdet.config import cfg, cfg_from_yaml_file
 from pcdet.datasets import DatasetTemplate
 from pcdet.models import build_network, load_data_to_gpu
 from pcdet.utils import common_utils
+from src.misc.io import load_metadata, safe_makedirs
+
+
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
+OPENPCDET_MODEL_PATH = WORKSPACE_ROOT / "models/pointpillars.pth"
 
 
 class PointCloudInferenceDataset(DatasetTemplate):
@@ -114,37 +120,17 @@ class PointCloudInferenceDataset(DatasetTemplate):
         return self.prepare_data(data_dict=input_dict)
 
 
-def _parse_args():
+def _parse_arguments():
     parser = argparse.ArgumentParser(description="Run a pretrained OpenPCDet model on unlabeled point clouds.")
     parser.add_argument(
-        "--cfg_file",
-        required=True,
-        type=Path,
-        help="Model config YAML corresponding to the pretrained checkpoint.",
+        "data_dir_path",
+        type=str,
+        help="Path to the directory containing all data.",
     )
     parser.add_argument(
-        "--ckpt",
-        required=True,
-        type=Path,
-        help="Pretrained OpenPCDet checkpoint (.pth).",
-    )
-    parser.add_argument(
-        "--data_path",
-        required=True,
-        type=Path,
-        help="Point-cloud file or directory containing point-cloud files.",
-    )
-    parser.add_argument(
-        "--output_path",
-        required=True,
-        type=Path,
-        help="Directory in which predictions will be written.",
-    )
-    parser.add_argument(
-        "--ext",
-        default=".npy",
-        choices=[".npy", ".bin"],
-        help="Input point-cloud file extension. Default: .npy",
+        "lidar_rpath_index",
+        type=int,
+        help="Index of LiDAR relative path in metadata.",
     )
     parser.add_argument(
         "--score_thresh",
@@ -152,7 +138,25 @@ def _parse_args():
         default=None,
         help=("Optional additional score threshold. If omitted, all predictions returned by the model/config are saved."),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    data_dir_path = os.environ.get("DATA_DIR_PATH", args.data_dir_path)
+    lidar_rpath_index = int(os.environ.get("LIDAR_RPATH_INDEX", args.lidar_rpath_index))
+
+    return data_dir_path, lidar_rpath_index, args.score_thresh
+
+
+def _get_inference_paths(data_dir_path: str, lidar_rpath_index: int):
+    metadata = load_metadata(data_dir_path)
+
+    intermediate_dir = WORKSPACE_ROOT / "data/intermediate" / metadata["unique_name"] / "lidar" / f"detections_{lidar_rpath_index}"
+
+    return (
+        intermediate_dir / "model.yaml",
+        OPENPCDET_MODEL_PATH,
+        intermediate_dir / "points",
+        intermediate_dir / "detections",
+    )
 
 
 def _save_predictions(
@@ -212,41 +216,45 @@ def _save_predictions(
 
 
 def main():
-    args = _parse_args()
+    data_dir_path, lidar_rpath_index, score_thresh = _parse_arguments()
+    cfg_file, ckpt, data_path, output_path = _get_inference_paths(
+        data_dir_path,
+        lidar_rpath_index,
+    )
 
-    if not args.cfg_file.is_file():
-        raise FileNotFoundError(f"Config file does not exist: {args.cfg_file}")
+    if not cfg_file.is_file():
+        raise FileNotFoundError(f"Config file does not exist: {cfg_file}")
 
-    if not args.ckpt.is_file():
-        raise FileNotFoundError(f"Checkpoint does not exist: {args.ckpt}")
+    if not ckpt.is_file():
+        raise FileNotFoundError(f"Checkpoint does not exist: {ckpt}")
 
-    if args.score_thresh is not None and not 0.0 <= args.score_thresh <= 1.0:
+    if score_thresh is not None and not 0.0 <= score_thresh <= 1.0:
         raise ValueError("--score_thresh must be between 0 and 1.")
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available inside the container. OpenPCDet inference requires the GPU in this setup.")
 
-    cfg_from_yaml_file(str(args.cfg_file), cfg)
+    cfg_from_yaml_file(str(cfg_file), cfg)
 
     logger = common_utils.create_logger()
     logger.info("Starting OpenPCDet inference")
-    logger.info("Config: %s", args.cfg_file)
-    logger.info("Checkpoint: %s", args.ckpt)
-    logger.info("Point clouds: %s", args.data_path)
+    logger.info("Config: %s", cfg_file)
+    logger.info("Checkpoint: %s", ckpt)
+    logger.info("Point clouds: %s", data_path)
 
     dataset = PointCloudInferenceDataset(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        root_path=args.data_path,
+        root_path=data_path,
         logger=logger,
-        ext=args.ext,
+        ext=".npy",
     )
 
-    args.output_path.mkdir(parents=True, exist_ok=True)
+    safe_makedirs(output_path)
 
     # Save the class-ID mapping once for interpreting pred_labels.
     class_map = {str(index + 1): class_name for index, class_name in enumerate(cfg.CLASS_NAMES)}
-    with open(args.output_path / "classes.json", "w", encoding="utf-8") as f:
+    with open(output_path / "classes.json", "w", encoding="utf-8") as f:
         json.dump(class_map, f, indent=2)
 
     logger.info("Total point clouds: %d", len(dataset))
@@ -259,7 +267,7 @@ def main():
     )
 
     model.load_params_from_file(
-        filename=str(args.ckpt),
+        filename=str(ckpt),
         logger=logger,
         to_cpu=True,
     )
@@ -282,11 +290,11 @@ def main():
                 raise RuntimeError(f"Expected one prediction dictionary for a one-frame batch, got {len(pred_dicts)}")
 
             num_detections = _save_predictions(
-                output_path=args.output_path,
+                output_path=output_path,
                 frame_id=frame_id,
                 pred_dict=pred_dicts[0],
                 class_names=cfg.CLASS_NAMES,
-                score_thresh=args.score_thresh,
+                score_thresh=score_thresh,
             )
             total_detections += num_detections
 
@@ -303,7 +311,7 @@ def main():
         len(dataset),
         total_detections,
     )
-    logger.info("Predictions written to: %s", args.output_path)
+    logger.info("Predictions written to: %s", output_path)
 
 
 if __name__ == "__main__":

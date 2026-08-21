@@ -5,184 +5,226 @@ from src.misc.conversion import get_ns_timestamp
 from pandas import DataFrame
 from pathlib import Path
 from collections.abc import Iterable
+from typing import Literal
+
+
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
+
+FilenameKind = Literal["filename", "timestamp", "frame"]
 
 
 def safe_makedirs(path, exist_ok: bool = True):
-	if isinstance(path, Path):
-		path_obj = path
-	else:
-		path_obj = Path(path)
+    if isinstance(path, Path):
+        path_obj = path
+    else:
+        path_obj = Path(path)
 
-	if path_obj.suffix:
-		path_obj = path_obj.parent
+    if path_obj.suffix:
+        path_obj = path_obj.parent
 
-	if path_obj and str(path_obj):
-		path_obj.mkdir(parents=True, exist_ok=exist_ok)
+    if path_obj and str(path_obj):
+        path_obj.mkdir(parents=True, exist_ok=exist_ok)
 
 
 # both lidar and images
-def get_filenames_and_paths(dir_path: str, valid_extensions: str | list[str]) -> tuple[list[str], list[str]]:
-	if isinstance(valid_extensions, str):
-		valid_extensions = [valid_extensions]
-   	
-	filenames = sorted([f for f in os.listdir(dir_path) if os.path.splitext(f)[1].lower() in valid_extensions])
+def get_filenames_and_paths(
+    dir_path: str,
+    valid_extensions: str | list[str],
+    filename_kind: FilenameKind = "filename",
+) -> tuple[list[str | int], list[str]]:
+    if isinstance(valid_extensions, str):
+        valid_extensions = [valid_extensions]
 
-	timestamps = [get_ns_timestamp(f) for f in filenames]
-	file_paths = [os.path.join(dir_path, f) for f in filenames]
+    if filename_kind not in ("filename", "timestamp", "frame"):
+        raise ValueError(f"Unsupported filename kind: {filename_kind}")
 
-	return timestamps, file_paths
+    normalized_exts = []
+    for ext in valid_extensions:
+        ext = ext.lower()
+        if not ext.startswith("."):
+            ext = "." + ext
+        normalized_exts.append(ext)
+
+    filenames = [filename for filename in os.listdir(dir_path) if os.path.splitext(filename)[1].lower() in normalized_exts]
+
+    records: list[tuple[str | int, str]] = []
+    for filename in filenames:
+        if filename_kind == "timestamp":
+            identifier: str | int = get_ns_timestamp(filename)
+        elif filename_kind == "frame":
+            identifier = int(os.path.splitext(filename)[0])
+        else:
+            identifier = filename
+
+        records.append((identifier, os.path.join(dir_path, filename)))
+
+    records.sort(key=lambda record: record[0])
+
+    identifiers = [identifier for identifier, _ in records]
+    file_paths = [file_path for _, file_path in records]
+
+    return identifiers, file_paths
 
 
 def delete_data_intermediate_dir():
-	import shutil
+    import shutil
 
-	intermediate_dir = "data/intermediate"
-	if os.path.exists(intermediate_dir):
-		shutil.rmtree(intermediate_dir)
+    intermediate_dir = WORKSPACE_ROOT / "data/intermediate"
+    if os.path.exists(intermediate_dir):
+        shutil.rmtree(intermediate_dir)
 
 
-def load_metadata(data_dir_path: str, throw_no_file_error: bool = True, use_true_path: bool = False):
-	metadata_path = data_dir_path.replace("metadata.json", "")
-	metadata_path = os.path.join(metadata_path, "metadata.json" if use_true_path else "full_metadata.json")
+def load_metadata(
+    data_dir_path: str | Path,
+    throw_no_file_error: bool = True,
+    use_true_path: bool = False,
+) -> dict | None:
+    metadata_file = "metadata.json" if use_true_path else "full_metadata.json"
+    data_path = Path(data_dir_path)
 
-	if throw_no_file_error and not os.path.exists(metadata_path):
-		raise FileNotFoundError(f"Metadata file not found at {metadata_path}")
+    if data_path.name in ("metadata.json", "full_metadata.json"):
+        data_path = data_path.parent
 
-	with open(metadata_path, "r") as f:
-		metadata = json.load(f)
+    metadata_path = data_path / metadata_file
 
-	# check required keys exist
-	missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
-	if missing_keys:
-		raise KeyError(f"Metadata missing required keys: {missing_keys}")
+    if not metadata_path.is_file():
+        if throw_no_file_error:
+            raise FileNotFoundError(f"Metadata file not found at {metadata_path}")
+        return None
 
-	return metadata
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+
+    # check required keys exist
+    missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
+    if missing_keys:
+        raise KeyError(f"Metadata missing required keys: {missing_keys}")
+
+    return metadata
 
 
 def load_csv(csv_path: str, skip_rows=0) -> DataFrame:
-	import pandas as pd
+    import pandas as pd
 
-	try:
-		gps_dataframe = pd.read_csv(
-			csv_path,
-			skiprows=skip_rows,
-			skipinitialspace=True,
-		)
-	except Exception as e:
-		raise RuntimeError(f"Failed to load csv data from '{csv_path}': {e}")
+    try:
+        gps_dataframe = pd.read_csv(
+            csv_path,
+            skiprows=skip_rows,
+            skipinitialspace=True,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load csv data from '{csv_path}': {e}")
 
-	return gps_dataframe
+    return gps_dataframe
 
 
 def load_json(json_path: str):
-	if not os.path.exists(json_path):
-		raise FileNotFoundError(f"JSON file not found at {json_path}")
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"JSON file not found at {json_path}")
 
-	with open(json_path, "r") as f:
-		data = json.load(f)
+    with open(json_path, "r") as f:
+        data = json.load(f)
 
-	return data
+    return data
 
 
-def find_relative_dirs_with_file_types(root_path: str, valid_extensions: Iterable[str], sub_dir_rpath: str = '') -> list[str]:
-	root_search_path = Path(os.path.join(root_path, sub_dir_rpath))
+def find_relative_dirs_with_file_types(root_path: str, valid_extensions: Iterable[str], sub_dir_rpath: str = "") -> list[str]:
+    root_search_path = Path(os.path.join(root_path, sub_dir_rpath))
 
-	if not root_search_path.exists():
-		raise FileNotFoundError(f"Folder does not exist: {root_search_path}")
+    if not root_search_path.exists():
+        raise FileNotFoundError(f"Folder does not exist: {root_search_path}")
 
-	if not root_search_path.is_dir():
-		raise NotADirectoryError(f"Path is not a directory: {root_search_path}")
+    if not root_search_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {root_search_path}")
 
-	matching_folders: list[Path] = []
+    matching_folders: list[Path] = []
 
-	# Search current directory and all subdirectories
-	for search_path in [root_search_path, *sorted(path for path in root_search_path.rglob("*") if path.is_dir())]:
-		try:
-			contains_matching_file = any(path.is_file() and path.suffix.lower() in valid_extensions for path in search_path.iterdir())
-		except Exception:
-			continue
+    # Search current directory and all subdirectories
+    for search_path in [root_search_path, *sorted(path for path in root_search_path.rglob("*") if path.is_dir())]:
+        try:
+            contains_matching_file = any(path.is_file() and path.suffix.lower() in valid_extensions for path in search_path.iterdir())
+        except Exception:
+            continue
 
-		if contains_matching_file:
-			search_rpath = search_path.relative_to(root_path)
-			matching_folders.append(str(search_rpath))
+        if contains_matching_file:
+            search_rpath = search_path.relative_to(root_path)
+            matching_folders.append(str(search_rpath))
 
-	return matching_folders
+    return matching_folders
 
 
 def verify_data_dirs(data_dir_paths):
-	for i, data_dir_path in enumerate(data_dir_paths):
-		issues = []
+    for i, data_dir_path in enumerate(data_dir_paths):
+        issues = []
 
-		# load metadata
-		metadata = load_metadata(data_dir_path, throw_no_file_error=False, use_true_path=True)
-		if not metadata:
-			issues.append(f"[{data_dir_path}] Metadata is empty or invalid JSON.")
-			continue
+        # load metadata
+        metadata = load_metadata(data_dir_path, throw_no_file_error=False, use_true_path=True)
+        if not metadata:
+            issues.append(f"[{data_dir_path}] Metadata is empty or invalid JSON.")
+            continue
 
-		# verify required keys
-		missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
-		if missing_keys:
-			issues.append(f"[{data_dir_path}] Metadata missing required keys: {missing_keys}")
-			continue
+        # verify required keys
+        missing_keys = [key for key in METADATA_REQUIRED_KEYS if key not in metadata]
+        if missing_keys:
+            issues.append(f"[{data_dir_path}] Metadata missing required keys: {missing_keys}")
+            continue
 
-		# fill in all defaults
-		for key in METADATA_DEFAULTS:
-			metadata[key] = metadata.get(key, METADATA_DEFAULTS[key])
+        # fill in all defaults
+        for key in METADATA_DEFAULTS:
+            metadata[key] = metadata.get(key, METADATA_DEFAULTS[key])
 
-			if metadata[key] is None:  # if key or default is None, proceed to special defaults
-				del metadata[key]
+        # fill in special defaults
+        metadata["lidar_rpaths"] = metadata.get(
+            "lidar_rpaths", find_relative_dirs_with_file_types(data_dir_path, LIDAR_EXTENSIONS, sub_dir_rpath="lidar")
+        )
+        metadata["image_rpaths"] = metadata.get(
+            "image_rpaths", find_relative_dirs_with_file_types(data_dir_path, IMAGE_EXTENSIONS, sub_dir_rpath="images")
+        )
+        if not metadata.get("unique_name", None):
+            metadata["unique_name"] = f"data_dir_{i}"
+        if not metadata.get("lidar_transformations", None):
+            metadata["lidar_transformations"] = [[0, 0, 0]] * len(metadata["lidar_rpaths"])
 
-		# fill in special defaults
-		metadata["lidar_rpaths"] = metadata.get(
-			"lidar_rpaths", find_relative_dirs_with_file_types(data_dir_path, LIDAR_EXTENSIONS, sub_dir_rpath="lidar")
-		)
-		metadata["image_rpaths"] = metadata.get(
-			"image_rpaths", find_relative_dirs_with_file_types(data_dir_path, IMAGE_EXTENSIONS, sub_dir_rpath="images")
-		)
-		metadata["unique_name"] = f'data_dir_{i}'
+        # verify lidar
+        if not metadata["lidar_rpaths"]:
+            issues.append(f"[{data_dir_path}] Metadata 'lidar_rpaths' is empty or missing.")
+        for lidar_rpath in metadata["lidar_rpaths"]:
+            lidar_path = os.path.join(data_dir_path, lidar_rpath)
+            if not os.path.isdir(lidar_path):
+                issues.append(f"[{data_dir_path}] Lidar directory does not exist: {lidar_path}")
+                continue
 
-		if not metadata["lidar_transformations"]:
-			metadata["lidar_transformations"] = [[0, 0, 0]] * len(metadata["lidar_rpaths"])
+            lidar_files, _ = get_filenames_and_paths(lidar_path, LIDAR_EXTENSIONS)
+            if not lidar_files:
+                issues.append(f"[{data_dir_path}] No lidar files with extensions {LIDAR_EXTENSIONS} found in {lidar_path}")
 
-		# verify lidar
-		if not metadata["lidar_rpaths"]:
-			issues.append(f"[{data_dir_path}] Metadata 'lidar_rpaths' is empty or missing.")
-		for lidar_rpath in metadata["lidar_rpaths"]:
-			lidar_path = os.path.join(data_dir_path, lidar_rpath)
-			if not os.path.isdir(lidar_path):
-				issues.append(f"[{data_dir_path}] Lidar directory does not exist: {lidar_path}")
-				continue
+        # verify image
+        if not metadata["image_rpaths"]:
+            issues.append(f"[{data_dir_path}] Metadata 'image_rpaths' is empty or missing.")
+        for image_rpath in metadata["image_rpaths"]:
+            image_path = os.path.join(data_dir_path, image_rpath)
+            if not os.path.isdir(image_path):
+                issues.append(f"[{data_dir_path}] Image directory does not exist: {image_path}")
+                continue
 
-			lidar_files = get_filenames_and_paths(lidar_path, LIDAR_EXTENSIONS)
-			if not lidar_files:
-				issues.append(f"[{data_dir_path}] No lidar files with extensions {LIDAR_EXTENSIONS} found in {lidar_path}")
+            image_files, _ = get_filenames_and_paths(image_path, IMAGE_EXTENSIONS)
+            if not image_files:
+                issues.append(f"[{data_dir_path}] No image files with extensions {IMAGE_EXTENSIONS} found in {image_path}")
 
-		# verify image
-		if not metadata["image_rpaths"]:
-			issues.append(f"[{data_dir_path}] Metadata 'image_rpaths' is empty or missing.")
-		for image_rpath in metadata["image_rpaths"]:
-			image_path = os.path.join(data_dir_path, image_rpath)
-			if not os.path.isdir(image_path):
-				issues.append(f"[{data_dir_path}] Image directory does not exist: {image_path}")
-				continue
+        # verify gps
+        if not os.path.exists(os.path.join(data_dir_path, metadata["gps_rpath"])):
+            issues.append(f"[{data_dir_path}] gps.csv not found at expected path: {metadata['gps_rpath']}")
 
-			image_files = get_filenames_and_paths(image_path, IMAGE_EXTENSIONS)
-			if not image_files:
-				issues.append(f"[{data_dir_path}] No image files with extensions {IMAGE_EXTENSIONS} found in {image_path}")
+        # verify canbus
+        canbus_rpath = metadata.get("canbus_rpath", METADATA_DEFAULTS["canbus_rpath"])
+        if not os.path.exists(os.path.join(data_dir_path, canbus_rpath)):
+            issues.append(f"[{data_dir_path}] canbus.csv not found at expected path: {canbus_rpath}")
 
-		# verify gps
-		if not os.path.exists(os.path.join(data_dir_path, metadata["gps_rpath"])):
-			issues.append(f"[{data_dir_path}] gps.csv not found at expected path: {metadata['gps_rpath']}")
+        # log issues
+        if len(issues) > 0:
+            raise Exception(f"Data verification of {data_dir_path} failed:\n" + "\n".join(issues))
 
-		# verify canbus
-		canbus_rpath = metadata.get("canbus_rpath", METADATA_DEFAULTS["canbus_rpath"])
-		if not os.path.exists(os.path.join(data_dir_path, canbus_rpath)):
-			issues.append(f"[{data_dir_path}] canbus.csv not found at expected path: {canbus_rpath}")
-
-		# log issues
-		if len(issues) > 0:
-			print(f"Data verification of ${data_dir_path} failed:\n" + "\n".join(issues))
-		else:
-			# write full metadata
-			with open(os.path.join(data_dir_path, "full_metadata.json"), "w") as f:
-				json.dump(metadata, f, indent=4)
+        else:
+            # write full metadata
+            with open(os.path.join(data_dir_path, "full_metadata.json"), "w") as f:
+                json.dump(metadata, f, indent=4)

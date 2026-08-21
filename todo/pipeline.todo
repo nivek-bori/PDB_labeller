@@ -1,10 +1,11 @@
 Detailed Pipeline:
   Data Foramt:
-    ▫ store every processed output before unifying in intermediate/{rel_path_i}/{data_type}
-      ▫ lidar
-      ▫ image
-      ▫ heartrate
-      ▫ gps
+    ▫ store every processed output before unifying in intermediate/{unique_name}/{rel_path_i?}/{data_type}
+      ✔ lidar @done(26-08-21 12:08)
+        ✔ openpcdet @done(26-08-21 12:08)
+        ✔ ab3dmot @done(26-08-21 12:08)
+      ✔ image @done(26-08-21 12:08)
+      ✔ gps @done(26-08-21 11:31)
     ▫ test everything
   
   3D Trajectory Dataset:
