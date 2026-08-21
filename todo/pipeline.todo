@@ -1,31 +1,18 @@
 Detailed Pipeline:
-  Data Foramt:
-    ▫ store every processed output before unifying in intermediate/{unique_name}/{rel_path_i?}/{data_type}
-      ✔ lidar @done(26-08-21 12:08)
-        ✔ openpcdet @done(26-08-21 12:08)
-        ✔ ab3dmot @done(26-08-21 12:08)
-      ✔ image @done(26-08-21 12:08)
-      ✔ gps @done(26-08-21 11:31)
-    ▫ test everything
-  
-  3D Trajectory Dataset:
-    ▫ Load 3D Tracks and Processed GPS data (python)
-      ▫ 3D Tracks: [timestamp, driver_id, track_id, class, x & y, z, vx, vy, heading, lenght, width, height] // xyz in local coordinates
-      ▫ GPS: [timestamp, x & y, z] // xyz in global coordinates
-    ▫ Apply track transformation and convert to global coordinates (python)
-      ▫ keep track.fblrud velocity in meters/s
-      ▫ track.global_xyz = to_latlon(track.xyz) + gps.xyz
-        ▫ figure out which of x or y means N/S or E/W from AB3DMOT output @next
-        ▫ def to_latlon(xyz)
-    ▫ Store trajectory data in Parquet or CSV file with [timestamp, driver_id, track_id, class, x, y, z, vx, vy, heading, length, width, height] // xyz in global coordinates (python)
-    ▫ Store matched_gps in csv with [timestamp, x, y, z] // xyz in global coordinates (python)
+  Data Unifier:
+    ▫ Load all data in standardized format
+    ▫ Interpolate GPS to lidar track time
+    ▫ Convert from lidar track xy position and add latlon to lidar track data
+      ▫ Figure out xy -> NWSE
+    ▫ Optimize unified time
+    ▫ Add unified time to all data
+    ▫ Store all data in prefered format (unify/write.py)
 
   Sequencer:
     ▫ Add final sequencer (separate into 50 frame / 10s @ 0.2HZ)
 
   Code Quality:
     ▫ Standardize using "path" / "path" and string paths, not Path paths
-    ▫ Standardize using WORKSPACE_PATH
 
   Additional Optimizations:
     ▫ Allow things to run in paralell within docker containers by separating different data_dir pipelines by using the unique name in metadata
